@@ -103,4 +103,25 @@ public class MissionController {
         );
         return ResponseEntity.ok(response);
     }
+
+    @Operation(summary = "진행 중인 미션 조회", description = "앱 재실행 시 복구를 위해 현재 진행 중(READY, IN_PROGRESS, ARRIVED)인 미션 상태를 확인합니다.")
+    @GetMapping("/current")
+    public ResponseEntity<CurrentMissionResponse> getCurrentMission(
+            @RequestHeader(value = "Authorization", required = false) String token) {
+        
+        CurrentMissionResponse response = new CurrentMissionResponse(
+                true,
+                new CurrentMissionResponse.ActiveMissionInfo(
+                        1001L,
+                        "IN_PROGRESS",
+                        LocalDateTime.now().minusMinutes(5),
+                        new CurrentMissionResponse.PlaceInfo(
+                                2001L, "18577297", "역삼동 근린공원", "공원", "서울특별시 강남구 역삼로 123",
+                                new BigDecimal("37.499000"), new BigDecimal("127.028000")
+                        ),
+                        50
+                )
+        );
+        return ResponseEntity.ok(response);
+    }
 }
