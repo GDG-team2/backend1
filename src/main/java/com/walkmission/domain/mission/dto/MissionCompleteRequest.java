@@ -10,9 +10,6 @@ public record MissionCompleteRequest(
         @Schema(description = "사후 설문 별점 (1~5)", example = "5")
         @NotNull @Min(1) @Max(5) Integer afterSurveyScore,
         
-        @Schema(description = "실제 소요 시간(초)", example = "930")
-        Integer actualDurationSeconds,
-        
         @Schema(description = "걸음 수", example = "1850")
         Integer stepCount
 ) {}

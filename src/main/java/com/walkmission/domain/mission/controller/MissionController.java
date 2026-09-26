@@ -78,6 +78,7 @@ public class MissionController {
                 missionId,
                 "COMPLETED",
                 LocalDateTime.now(),
+                request.stepCount() != null ? request.stepCount() : 1850,
                 new MissionCompleteResponse.RewardInfo(50, 1550),
                 new MissionCompleteResponse.RankingInfo(true, 100, 500),
                 new MissionCompleteResponse.StreakInfo(6, true),

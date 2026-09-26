@@ -9,6 +9,7 @@ public record MissionCompleteResponse(
         @Schema(description = "미션 ID", example = "1001") Long missionId,
         @Schema(description = "미션 상태", example = "COMPLETED") String status,
         @Schema(description = "완료 일시") LocalDateTime completedAt,
+        @Schema(description = "기록된 걸음 수", example = "1850") Integer stepCount,
         @Schema(description = "보상 포인트 정보") RewardInfo reward,
         @Schema(description = "랭킹 스코어 정보") RankingInfo ranking,
         @Schema(description = "스트릭 정보") StreakInfo streak,
