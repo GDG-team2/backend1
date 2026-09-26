@@ -34,6 +34,7 @@ public class AuthController {
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
         LoginResponse response = new LoginResponse(
                 "mock-access-token-string",
+                "mock-refresh-token-string",
                 UUID.randomUUID(),
                 "walking_master"
         );

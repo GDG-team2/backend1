@@ -14,6 +14,9 @@ public record UserProfileResponse(
         @Schema(description = "닉네임", example = "walking_master")
         String nickname,
         
+        @Schema(description = "프로필 이미지 URL", example = "https://cdn.walkmission.com/profiles/u1.png")
+        String profileImageUrl,
+        
         @Schema(description = "동네 정보")
         RegionInfo region,
         

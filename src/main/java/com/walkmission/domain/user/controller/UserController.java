@@ -24,6 +24,7 @@ public class UserController {
                 UUID.randomUUID(),
                 "user@example.com",
                 "walking_master",
+                "https://cdn.walkmission.com/profiles/u1.png",
                 new UserProfileResponse.RegionInfo("1168010100", "서울특별시 강남구 역삼동"),
                 new UserProfileResponse.AssetInfo(1500),
                 new UserProfileResponse.StreakInfo(5, 14),

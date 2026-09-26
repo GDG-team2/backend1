@@ -26,7 +26,7 @@ public class MissionController {
                 1001L,
                 "READY",
                 new MissionRecommendResponse.PlaceInfo(
-                        2001L, "역삼동 근린공원", "공원", "서울특별시 강남구 역삼로 123",
+                        2001L, "18577297", "역삼동 근린공원", "공원", "서울특별시 강남구 역삼로 123",
                         new BigDecimal("37.499000"), new BigDecimal("127.028000")
                 ),
                 450,

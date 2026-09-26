@@ -14,6 +14,7 @@ public record MissionRecommendResponse(
 ) {
     public record PlaceInfo(
             @Schema(description = "장소 ID", example = "2001") Long placeId,
+            @Schema(description = "카카오 장소 ID", example = "18577297") String kakaoPlaceId,
             @Schema(description = "장소 이름", example = "역삼동 근린공원") String name,
             @Schema(description = "장소 카테고리", example = "공원") String category,
             @Schema(description = "도로명 주소", example = "서울특별시 강남구 역삼로 123") String roadAddress,
