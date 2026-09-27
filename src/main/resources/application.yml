@@ -1,6 +1,8 @@
 spring:
   application:
     name: walkmission
+  profiles:
+    active: local
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/walkmission}
     username: ${DB_USERNAME:postgres}
