@@ -1,1 +1,6 @@
 PROJECT_CONTEXT.md
+
+# Local Environment Config
+application-local.yml
+application-local.properties
+application-loacal.yml
