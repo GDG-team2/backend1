@@ -1,0 +1,68 @@
+package com.walkmission.domain.user.service;
+
+import com.walkmission.domain.user.dto.UserProfileResponse;
+import com.walkmission.domain.user.dto.UserSettingsUpdateRequest;
+import com.walkmission.domain.user.dto.UserSettingsUpdateResponse;
+import com.walkmission.domain.user.entity.User;
+import com.walkmission.domain.user.entity.UserProfile;
+import com.walkmission.domain.user.entity.UserSetting;
+import com.walkmission.domain.user.repository.UserProfileRepository;
+import com.walkmission.domain.user.repository.UserRepository;
+import com.walkmission.domain.user.repository.UserSettingRepository;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+
+@Service
+public class UserService {
+    private final UserRepository userRepository;
+    private final UserProfileRepository userProfileRepository;
+    private final UserSettingRepository userSettingRepository;
+
+    public UserService(UserRepository userRepository, UserProfileRepository userProfileRepository, UserSettingRepository userSettingRepository) {
+        this.userRepository = userRepository;
+        this.userProfileRepository = userProfileRepository;
+        this.userSettingRepository = userSettingRepository;
+    }
+
+    public UserProfileResponse getProfile(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        UserProfile profile = userProfileRepository.findByUserId(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Profile not found"));
+
+        return new UserProfileResponse(
+            user.getUserUuid(),
+            user.getEmail(),
+            user.getNickname(),
+            user.getProfileImageUrl(),
+            new UserProfileResponse.RegionInfo(user.getRegionCode(), "?????†ìŒ"),
+            new UserProfileResponse.AssetInfo(profile.getCurrentPoint()),
+            new UserProfileResponse.StreakInfo(profile.getStreakNow(), profile.getStreakRecord()),
+            new UserProfileResponse.BadgeInfo(1L, "ê±·ê¸° ì´ˆë³´", "url"),
+            new UserProfileResponse.StatsInfo(0)
+        );
+    }
+
+    @Transactional
+    public UserSettingsUpdateResponse updateSettings(Long userId, UserSettingsUpdateRequest request) {
+        UserSetting setting = userSettingRepository.findByUserId(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Setting not found"));
+        
+        setting.update(request.quietStart(), request.quietEnd(), request.allAlarm());
+
+        return new UserSettingsUpdateResponse(
+            setting.getUser().getUserUuid(),
+            setting.getAllAlarm(), setting.getStartAlarm(), setting.getMissionAlarm(),
+            setting.getInsightAlarm(), setting.getRewardAlarm(),
+            setting.getQuietStart(), setting.getQuietEnd(),
+            setting.getRankingSetting(), setting.getNameSetting(),
+            setting.getPlaceSetting(), setting.getFriendSetting(),
+            setting.getUpdatedAt(),
+            "?¤ì •???±ê³µ?ìœ¼ë¡?ë³€ê²½ë˜?ˆìŠµ?ˆë‹¤."
+        );
+    }
+}
