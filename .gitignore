@@ -4,3 +4,19 @@ PROJECT_CONTEXT.md
 application-local.yml
 application-local.properties
 application-loacal.yml
+
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Java
+*.class
+*.log
+*.jar
+*.war
