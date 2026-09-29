@@ -50,7 +50,7 @@ public class AuthService {
         }
 
         String encodedPassword = passwordEncoder.encode(request.password());
-        User user = new User(request.email(), encodedPassword, request.nickname());
+        User user = new User(request.email(), encodedPassword, request.nickname(), request.birth(), request.regionCode());
         user = userRepository.save(user);
 
         userSettingRepository.save(new UserSetting(user));

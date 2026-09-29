@@ -25,11 +25,13 @@ public class User extends BaseTimeEntity {
     
     protected User() {}
 
-    public User(String email, String password, String nickname) {
+    public User(String email, String password, String nickname, LocalDate birth, String regionCode) {
         this.userUuid = UUID.randomUUID();
         this.email = email;
         this.password = password;
         this.nickname = nickname;
+        this.birth = birth;
+        this.regionCode = regionCode;
     }
 
     public Long getId() { return id; }
