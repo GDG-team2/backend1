@@ -4,7 +4,6 @@ import com.walkmission.domain.mission.dto.*;
 import com.walkmission.domain.mission.entity.MissionRecord;
 import com.walkmission.domain.mission.entity.MissionStatus;
 import com.walkmission.domain.mission.entity.Place;
-import com.walkmission.domain.mission.exception.NotEnoughDistanceException;
 import com.walkmission.domain.mission.repository.MissionRecordRepository;
 import com.walkmission.domain.mission.repository.PlaceRepository;
 import com.walkmission.domain.ranking.service.RankingService;
@@ -14,16 +13,17 @@ import com.walkmission.domain.reward.service.RewardService;
 import com.walkmission.domain.user.entity.User;
 import com.walkmission.domain.user.repository.UserRepository;
 import com.walkmission.global.util.GeoUtils;
-import org.springframework.http.HttpStatus;
+import com.walkmission.global.error.BusinessException;
+import com.walkmission.global.error.ErrorCode;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class MissionService {
@@ -51,10 +51,10 @@ public class MissionService {
     @Transactional
     public MissionRecommendResponse recommend(Long userId, MissionRecommendRequest request) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
         if (missionRecordRepository.existsByUserIdAndStatusIn(userId, MissionStatus.WALKING)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 진행 중인 미션이 있습니다.");
+            throw new BusinessException(ErrorCode.ACTIVE_MISSION_EXISTS);
         }
 
         // 출발 전(READY) 미션은 새 추천으로 대체한다.
@@ -88,7 +88,7 @@ public class MissionService {
         requireStatus(mission, MissionStatus.READY);
 
         if (missionRecordRepository.existsByUserIdAndStatusIn(userId, MissionStatus.WALKING)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 진행 중인 미션이 있습니다.");
+            throw new BusinessException(ErrorCode.ACTIVE_MISSION_EXISTS);
         }
 
         Integer beforeSurvey = request != null ? request.beforeSurveyScore() : null;
@@ -108,7 +108,7 @@ public class MissionService {
         double distance = GeoUtils.distanceMeters(
                 request.latitude(), request.longitude(), place.getLatitude(), place.getLongitude());
         if (distance > ARRIVAL_RADIUS_METERS) {
-            throw new NotEnoughDistanceException((int) Math.round(distance));
+            throw new BusinessException(ErrorCode.NOT_ENOUGH_DISTANCE, Map.of("currentDistanceMeters", (int) Math.round(distance)));
         }
 
         mission.arrive(LocalDateTime.now());
@@ -153,7 +153,7 @@ public class MissionService {
     public MissionAbortResponse abort(Long userId, Long missionId) {
         MissionRecord mission = getMission(userId, missionId);
         if (!mission.getStatus().isActive()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 종료된 미션입니다: " + mission.getStatus());
+            throw new BusinessException(ErrorCode.INVALID_MISSION_STATUS, Map.of("currentStatus", mission.getStatus().name()));
         }
 
         mission.abort(LocalDateTime.now());
@@ -191,7 +191,7 @@ public class MissionService {
                 .stream()
                 .min(Comparator.comparingDouble(place -> GeoUtils.distanceMeters(
                         latitude, longitude, place.getLatitude(), place.getLongitude())))
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "주변에 추천할 장소가 없습니다."));
+                .orElseThrow(() -> new BusinessException(ErrorCode.NO_NEARBY_PLACE));
     }
 
     private BigDecimal offset(BigDecimal value, double delta) {
@@ -200,13 +200,12 @@ public class MissionService {
 
     private MissionRecord getMission(Long userId, Long missionId) {
         return missionRecordRepository.findByIdAndUserId(missionId, userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Mission not found"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.MISSION_NOT_FOUND));
     }
 
     private void requireStatus(MissionRecord mission, MissionStatus expected) {
         if (mission.getStatus() != expected) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "현재 미션 상태(" + mission.getStatus() + ")에서는 요청을 처리할 수 없습니다.");
+            throw new BusinessException(ErrorCode.INVALID_MISSION_STATUS, Map.of("currentStatus", mission.getStatus().name()));
         }
     }
 }

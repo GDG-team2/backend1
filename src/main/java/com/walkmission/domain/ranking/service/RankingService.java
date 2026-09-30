@@ -13,11 +13,11 @@ import com.walkmission.domain.user.repository.UserSettingRepository;
 import com.walkmission.global.util.RegionUtils;
 import com.walkmission.global.util.TimeUtils;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.Scheduled;
+import com.walkmission.global.error.BusinessException;
+import com.walkmission.global.error.ErrorCode;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -71,7 +71,7 @@ public class RankingService {
     @Transactional(readOnly = true)
     public RegionRankingResponse getMyRegionRanking(Long userId, int limit) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
         String regionCode = user.getRegionCode();
         LocalDate weekStart = TimeUtils.weekStart(TimeUtils.today());
         int size = Math.max(1, Math.min(limit, MAX_LEADERBOARD_SIZE));

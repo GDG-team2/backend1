@@ -15,12 +15,13 @@ import com.walkmission.domain.user.repository.UserProfileRepository;
 import com.walkmission.domain.user.repository.UserRepository;
 import com.walkmission.domain.user.repository.UserSettingRepository;
 import com.walkmission.global.auth.JwtProvider;
+import com.walkmission.global.error.BusinessException;
+import com.walkmission.global.error.ErrorCode;
 import io.jsonwebtoken.Claims;
-import org.springframework.http.HttpStatus;
+import io.jsonwebtoken.JwtException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class AuthService {
@@ -45,11 +46,11 @@ public class AuthService {
     @Transactional
     public SignupResponse signup(SignupRequest request) {
         if (userRepository.existsByEmail(request.email())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Email already exists");
+            throw new BusinessException(ErrorCode.DUPLICATE_EMAIL);
         }
         
         if (request.password().length() < 8 || !request.password().matches(".*[a-zA-Z].*") || !request.password().matches(".*\\d.*")) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password must be at least 8 characters and contain letters and numbers");
+            throw new BusinessException(ErrorCode.INVALID_PASSWORD_FORMAT);
         }
 
         String encodedPassword = passwordEncoder.encode(request.password());
@@ -65,10 +66,10 @@ public class AuthService {
 
     public LoginResponse login(LoginRequest request) {
         User user = userRepository.findByEmail(request.email())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.LOGIN_FAILED));
 
         if (!passwordEncoder.matches(request.password(), user.getPassword())) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password");
+            throw new BusinessException(ErrorCode.LOGIN_FAILED);
         }
 
         String accessToken = jwtProvider.createAccessToken(user.getId(), user.getUserUuid());
@@ -82,15 +83,15 @@ public class AuthService {
         try {
             Claims claims = jwtProvider.getClaims(request.refreshToken());
             if (!JwtProvider.REFRESH_TOKEN_TYPE.equals(claims.get(JwtProvider.TOKEN_TYPE_CLAIM, String.class))) {
-                throw new IllegalArgumentException("Not a refresh token");
+                throw new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
             }
             userId = Long.parseLong(claims.getSubject());
-        } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid or expired refresh token");
+        } catch (JwtException | IllegalArgumentException e) {
+            throw new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
         }
 
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN));
 
         String accessToken = jwtProvider.createAccessToken(user.getId(), user.getUserUuid());
         String refreshToken = jwtProvider.createRefreshToken(user.getId());

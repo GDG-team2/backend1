@@ -16,10 +16,10 @@ import com.walkmission.domain.user.repository.UserProfileRepository;
 import com.walkmission.global.util.TimeUtils;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.http.HttpStatus;
+import com.walkmission.global.error.BusinessException;
+import com.walkmission.global.error.ErrorCode;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -154,6 +154,6 @@ public class RewardService {
 
     private UserProfile getProfile(Long userId) {
         return userProfileRepository.findByUserId(userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Profile not found"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
     }
 }

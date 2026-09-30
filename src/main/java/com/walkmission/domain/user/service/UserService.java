@@ -14,10 +14,10 @@ import com.walkmission.domain.user.repository.UserRepository;
 import com.walkmission.domain.user.repository.UserSettingRepository;
 import com.walkmission.global.util.RegionUtils;
 import com.walkmission.global.util.TimeUtils;
-import org.springframework.http.HttpStatus;
+import com.walkmission.global.error.BusinessException;
+import com.walkmission.global.error.ErrorCode;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class UserService {
@@ -38,9 +38,9 @@ public class UserService {
 
     public UserProfileResponse getProfile(Long userId) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
         UserProfile profile = userProfileRepository.findByUserId(userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Profile not found"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
         long completedMissions = missionRecordRepository.countByUserIdAndStatus(userId, MissionStatus.COMPLETED);
         UserProfileResponse.BadgeInfo representativeBadge = profile.getRepresentativeBadgeId() == null ? null
                 : badgeRepository.findById(profile.getRepresentativeBadgeId())
@@ -63,7 +63,7 @@ public class UserService {
     @Transactional
     public UserSettingsUpdateResponse updateSettings(Long userId, UserSettingsUpdateRequest request) {
         UserSetting setting = userSettingRepository.findByUserId(userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Setting not found"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
         setting.update(request);
 
