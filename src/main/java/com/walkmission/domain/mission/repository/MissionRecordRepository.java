@@ -4,6 +4,8 @@ import com.walkmission.domain.mission.entity.AbortReason;
 import com.walkmission.domain.mission.entity.MissionRecord;
 import com.walkmission.domain.mission.entity.MissionStatus;
 import com.walkmission.domain.mission.entity.PlaceCategory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -49,6 +51,33 @@ public interface MissionRecordRepository extends JpaRepository<MissionRecord, Lo
 
     @Query("select distinct m.place.kakaoPlaceId from MissionRecord m where m.user.id = :userId and m.status = com.walkmission.domain.mission.entity.MissionStatus.COMPLETED")
     List<String> findAllCompletedPlaceKakaoIds(@Param("userId") Long userId);
+
+    // ---- 기록 조회 (기간·범주 필터는 항상 값을 넘긴다: 전체면 모든 범주) ----
+    String COMPLETED_IN_RANGE = " from MissionRecord m where m.user.id = :userId"
+            + " and m.status = com.walkmission.domain.mission.entity.MissionStatus.COMPLETED"
+            + " and m.completedAt >= :from and m.completedAt < :to and m.placeCategory in :categories";
+
+    @Query(value = "select m" + COMPLETED_IN_RANGE + " order by m.completedAt desc",
+            countQuery = "select count(m)" + COMPLETED_IN_RANGE)
+    Page<MissionRecord> findCompletedHistory(@Param("userId") Long userId, @Param("from") LocalDateTime from,
+                                             @Param("to") LocalDateTime to,
+                                             @Param("categories") Collection<PlaceCategory> categories,
+                                             Pageable pageable);
+
+    @Query("select new com.walkmission.domain.mission.repository.HistoryStats(count(m), coalesce(sum(m.durationMinutes), 0),"
+            + " avg(m.afterSurvey), coalesce(sum(m.distanceMeters), 0),"
+            + " coalesce(sum(case when m.isNewPlace = true then 1 else 0 end), 0))" + COMPLETED_IN_RANGE)
+    HistoryStats aggregateCompleted(@Param("userId") Long userId, @Param("from") LocalDateTime from,
+                                    @Param("to") LocalDateTime to,
+                                    @Param("categories") Collection<PlaceCategory> categories);
+
+    @Query("select new com.walkmission.domain.mission.repository.VisitedPlaceRow(p.id, p.name, p.category, p.latitude, p.longitude,"
+            + " count(m), max(m.completedAt)) from MissionRecord m join m.place p where m.user.id = :userId"
+            + " and m.status = com.walkmission.domain.mission.entity.MissionStatus.COMPLETED"
+            + " and m.completedAt >= :from and m.completedAt < :to"
+            + " group by p.id, p.name, p.category, p.latitude, p.longitude order by max(m.completedAt) desc")
+    List<VisitedPlaceRow> findVisitedPlaces(@Param("userId") Long userId, @Param("from") LocalDateTime from,
+                                            @Param("to") LocalDateTime to);
 
     @Query("select distinct m.place.kakaoPlaceId from MissionRecord m where m.user.id = :userId and m.status = :status and m.completedAt >= :since")
     List<String> findPlaceKakaoIdsCompletedSince(@Param("userId") Long userId, @Param("status") MissionStatus status,

@@ -114,7 +114,7 @@ public class RankingService {
             }
             User u = r.getUser();
             leaderboard.add(new RegionRankingResponse.RankingEntry(
-                    null, u.getUserUuid(), u.getNickname(), u.getProfileImageUrl(), rank, r.getUserScore(),
+                    null, u.getUserUuid(), u.getDisplayName(), u.getProfileImageUrl(), rank, r.getUserScore(),
                     r.getScoredMissionCount(), r.getBonusScore()));
         }
 
@@ -131,7 +131,7 @@ public class RankingService {
                 new RegionRankingResponse.RegionInfo(regionCode, RegionUtils.nameOf(regionCode)),
                 new RegionRankingResponse.WeekPeriodInfo(weekStart, weekStart.plusDays(6)),
                 new RegionRankingResponse.RankingEntry(
-                        participating, user.getUserUuid(), user.getNickname(), user.getProfileImageUrl(), myRank, myScore,
+                        participating, user.getUserUuid(), user.getDisplayName(), user.getProfileImageUrl(), myRank, myScore,
                         mine != null ? mine.getScoredMissionCount() : 0, mine != null ? mine.getBonusScore() : 0),
                 leaderboard
         );

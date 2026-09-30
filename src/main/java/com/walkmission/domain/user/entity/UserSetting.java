@@ -20,6 +20,8 @@ public class UserSetting extends BaseTimeEntity {
     private Boolean insightAlarm;
     private Boolean rewardAlarm;
     
+    /** 조용한 시간 사용 여부. 꺼져 있으면 quietStart~quietEnd는 저장만 되고 적용되지 않는다 */
+    private Boolean quietEnabled;
     private LocalTime quietStart;
     private LocalTime quietEnd;
     
@@ -49,6 +51,7 @@ public class UserSetting extends BaseTimeEntity {
         if (request.missionAlarm() != null) this.missionAlarm = request.missionAlarm();
         if (request.insightAlarm() != null) this.insightAlarm = request.insightAlarm();
         if (request.rewardAlarm() != null) this.rewardAlarm = request.rewardAlarm();
+        if (request.quietEnabled() != null) this.quietEnabled = request.quietEnabled();
         if (request.quietStart() != null) this.quietStart = request.quietStart();
         if (request.quietEnd() != null) this.quietEnd = request.quietEnd();
         if (request.rankingSetting() != null) this.rankingSetting = request.rankingSetting();
@@ -64,6 +67,7 @@ public class UserSetting extends BaseTimeEntity {
     public Boolean getMissionAlarm() { return missionAlarm; }
     public Boolean getInsightAlarm() { return insightAlarm; }
     public Boolean getRewardAlarm() { return rewardAlarm; }
+    public Boolean getQuietEnabled() { return Boolean.TRUE.equals(quietEnabled); }
     public LocalTime getQuietStart() { return quietStart; }
     public LocalTime getQuietEnd() { return quietEnd; }
     public Boolean getRankingSetting() { return rankingSetting; }

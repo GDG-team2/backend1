@@ -1,13 +1,19 @@
 package com.walkmission.domain.mission.controller;
 
 import com.walkmission.domain.mission.dto.*;
+import com.walkmission.domain.mission.entity.HistoryPeriod;
+import com.walkmission.domain.mission.entity.PlaceCategory;
+import com.walkmission.domain.mission.service.MissionHistoryService;
 import com.walkmission.domain.mission.service.MissionService;
 import com.walkmission.global.auth.LoginUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.time.YearMonth;
 
 @Tag(name = "Mission Domain", description = "산책 미션 관련 API")
 @RestController
@@ -15,9 +21,11 @@ import org.springframework.web.bind.annotation.*;
 public class MissionController {
 
     private final MissionService missionService;
+    private final MissionHistoryService missionHistoryService;
 
-    public MissionController(MissionService missionService) {
+    public MissionController(MissionService missionService, MissionHistoryService missionHistoryService) {
         this.missionService = missionService;
+        this.missionHistoryService = missionHistoryService;
     }
 
     @Operation(summary = "오늘의 미션 추천 생성", description = "현재 위치와 선호 설정(전체 외출 시간·이동수단·범주·예산)으로 카카오 장소 중 하나를 무작위로 추천합니다. 기분(mood)과 이번 추천에만 적용할 조건을 함께 보낼 수 있고, 다시 추천받으면 출발 전(READY) 미션은 대체되며 거절 이유(rejectReason)가 반영됩니다.")
@@ -76,6 +84,36 @@ public class MissionController {
             @PathVariable Long missionId,
             @Valid @RequestBody(required = false) MissionAbortRequest request) {
         return ResponseEntity.ok(missionService.abort(userId, missionId, request));
+    }
+
+    @Operation(summary = "활동 기록 목록", description = "완료한 미션을 최신순으로 조회합니다. period(WEEK 이번 주, MONTH 월간, ALL 전체, 기본 MONTH), yearMonth(월간일 때 \"2026-08\", 생략하면 이번 달), category, freeOnly(예상 비용 0원 범주만)로 거를 수 있고, summary는 필터에 맞는 전체 기록의 요약입니다.")
+    @GetMapping("/history")
+    public ResponseEntity<MissionHistoryResponse> getHistory(
+            @LoginUser Long userId,
+            @RequestParam(required = false) HistoryPeriod period,
+            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM") YearMonth yearMonth,
+            @RequestParam(required = false) PlaceCategory category,
+            @RequestParam(defaultValue = "false") boolean freeOnly,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(missionHistoryService.getHistory(userId, period, yearMonth, category, freeOnly, page, size));
+    }
+
+    @Operation(summary = "내 지도", description = "기간 내 다녀온 장소(지도 핀), 외출 횟수·새 장소 수·이동 거리 통계, 최근 기록 5건을 조회합니다. period 기본값은 MONTH입니다.")
+    @GetMapping("/map")
+    public ResponseEntity<MissionMapResponse> getMap(
+            @LoginUser Long userId,
+            @RequestParam(required = false) HistoryPeriod period,
+            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM") YearMonth yearMonth) {
+        return ResponseEntity.ok(missionHistoryService.getMap(userId, period, yearMonth));
+    }
+
+    @Operation(summary = "미션 기록 상세", description = "미션 하나의 장소, 소요 시간, 기분 변화(전 → 후), 타임라인(약속·출발·도착·완료/중단)을 조회합니다. 진행 중이거나 포기한 미션도 조회할 수 있습니다.")
+    @GetMapping("/{missionId}")
+    public ResponseEntity<MissionDetailResponse> getMissionDetail(
+            @LoginUser Long userId,
+            @PathVariable Long missionId) {
+        return ResponseEntity.ok(missionHistoryService.getDetail(userId, missionId));
     }
 
     @Operation(summary = "진행 중인 미션 조회", description = "앱 재실행 시 복구를 위해 현재 진행 중(READY, IN_PROGRESS, ARRIVED)인 미션 상태를 확인합니다.")

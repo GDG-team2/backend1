@@ -67,21 +67,14 @@ public class RewardService {
                 .map(ub -> ub.getBadge().getId())
                 .toList();
 
-        long missionCount = missionRecordRepository.countByUserIdAndStatus(userId, MissionStatus.COMPLETED);
-        long placeCount = missionRecordRepository.countDistinctPlaces(userId, MissionStatus.COMPLETED);
-        int bestRhythmWeeks = profile.getBestRhythmWeeks();
+        Progress progress = progressOf(userId, profile);
 
         List<Badge> newBadges = new ArrayList<>();
         for (Badge badge : badgeRepository.findByCodeIsNotNullOrderByIdAsc()) {
             if (ownedBadgeIds.contains(badge.getId())) continue;
 
             BadgeCondition condition = parseCondition(badge);
-            long progress = switch (condition.type()) {
-                case MISSION_COUNT -> missionCount;
-                case PLACE_COUNT -> placeCount;
-                case RHYTHM_WEEKS -> bestRhythmWeeks;
-            };
-            if (progress >= condition.threshold()) {
+            if (progress.valueFor(condition) >= condition.threshold()) {
                 userBadgeRepository.save(new UserBadge(user, badge));
                 newBadges.add(badge);
             }
@@ -116,15 +109,20 @@ public class RewardService {
         UserProfile profile = getProfile(userId);
         Map<Long, UserBadge> owned = userBadgeRepository.findByUserId(userId).stream()
                 .collect(Collectors.toMap(ub -> ub.getBadge().getId(), Function.identity(), (a, b) -> a));
+        Progress progress = progressOf(userId, profile);
 
         List<BadgeListResponse.BadgeDetail> details = badgeRepository.findByCodeIsNotNullOrderByIdAsc().stream()
                 .map(badge -> {
                     UserBadge userBadge = owned.get(badge.getId());
+                    BadgeCondition condition = parseCondition(badge);
+                    int target = condition.threshold();
+                    int current = userBadge != null ? target : (int) Math.min(progress.valueFor(condition), target);
                     return new BadgeListResponse.BadgeDetail(
                             badge.getId(), badge.getBadgeName(), badge.getDescription(), badge.getIconUrl(),
                             userBadge != null,
                             Objects.equals(badge.getId(), profile.getRepresentativeBadgeId()),
-                            userBadge != null ? userBadge.getCreatedAt() : null);
+                            userBadge != null ? userBadge.getCreatedAt() : null,
+                            current, target);
                 })
                 .toList();
 
@@ -133,6 +131,24 @@ public class RewardService {
                         (int) details.stream().filter(BadgeListResponse.BadgeDetail::isAcquired).count()),
                 details
         );
+    }
+
+    /** 배지 조건별 현재 진행 값 */
+    private record Progress(long missionCount, long placeCount, int bestRhythmWeeks) {
+        long valueFor(BadgeCondition condition) {
+            return switch (condition.type()) {
+                case MISSION_COUNT -> missionCount;
+                case PLACE_COUNT -> placeCount;
+                case RHYTHM_WEEKS -> bestRhythmWeeks;
+            };
+        }
+    }
+
+    private Progress progressOf(Long userId, UserProfile profile) {
+        return new Progress(
+                missionRecordRepository.countByUserIdAndStatus(userId, MissionStatus.COMPLETED),
+                missionRecordRepository.countDistinctPlaces(userId, MissionStatus.COMPLETED),
+                profile.getBestRhythmWeeks());
     }
 
     private BadgeCondition parseCondition(Badge badge) {

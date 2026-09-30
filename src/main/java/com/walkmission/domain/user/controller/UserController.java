@@ -3,6 +3,7 @@ package com.walkmission.domain.user.controller;
 import com.walkmission.domain.user.dto.PreferenceResponse;
 import com.walkmission.domain.user.dto.PreferenceUpdateRequest;
 import com.walkmission.domain.user.dto.UserProfileResponse;
+import com.walkmission.domain.user.dto.UserProfileUpdateRequest;
 import com.walkmission.domain.user.dto.UserSettingsUpdateRequest;
 import com.walkmission.domain.user.dto.UserSettingsUpdateResponse;
 import com.walkmission.domain.user.service.UserService;
@@ -28,6 +29,20 @@ public class UserController {
     @GetMapping("/profile")
     public ResponseEntity<UserProfileResponse> getProfile(@LoginUser Long userId) {
         return ResponseEntity.ok(userService.getProfile(userId));
+    }
+
+    @Operation(summary = "프로필 수정", description = "닉네임, 생활권(동네 코드), 출생 연도, 랭킹용 닉네임 중 보낸 필드만 변경하고, 변경된 프로필을 돌려줍니다. 랭킹용 닉네임에 빈 문자열을 보내면 설정을 지우고 닉네임이 표시됩니다.")
+    @PatchMapping("/profile")
+    public ResponseEntity<UserProfileResponse> updateProfile(
+            @LoginUser Long userId,
+            @Valid @RequestBody UserProfileUpdateRequest request) {
+        return ResponseEntity.ok(userService.updateProfile(userId, request));
+    }
+
+    @Operation(summary = "알림·공개 설정 조회", description = "설정 화면에 표시할 현재 알림, 조용한 시간, 공개 설정 값을 조회합니다. 응답 형식은 설정 변경과 같고 message는 null입니다.")
+    @GetMapping("/settings")
+    public ResponseEntity<UserSettingsUpdateResponse> getSettings(@LoginUser Long userId) {
+        return ResponseEntity.ok(userService.getSettings(userId));
     }
 
     @Operation(summary = "사용자 환경설정 수정")

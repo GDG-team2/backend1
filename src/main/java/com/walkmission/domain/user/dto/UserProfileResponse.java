@@ -11,9 +11,15 @@ public record UserProfileResponse(
         @Schema(description = "이메일", example = "user@example.com")
         String email,
         
-        @Schema(description = "닉네임", example = "walking_master")
+        @Schema(description = "닉네임", example = "선우")
         String nickname,
-        
+
+        @Schema(description = "랭킹에 표시할 닉네임 (설정하지 않았으면 null이고 닉네임이 표시됨)", example = "선우")
+        String rankingNickname,
+
+        @Schema(description = "출생 연도 (입력하지 않았으면 null)", example = "2006")
+        Integer birthYear,
+
         @Schema(description = "프로필 이미지 URL", example = "https://cdn.walkmission.com/profiles/u1.png")
         String profileImageUrl,
         

@@ -14,6 +14,7 @@ public record UserSettingsUpdateResponse(
         @Schema(description = "미션 알림") Boolean missionAlarm,
         @Schema(description = "인사이트 알림") Boolean insightAlarm,
         @Schema(description = "보상 알림") Boolean rewardAlarm,
+        @Schema(description = "조용한 시간 사용 여부", example = "true") Boolean quietEnabled,
         @Schema(description = "방해 금지 시작 시간", example = "22:00:00")
         @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "HH:mm:ss") LocalTime quietStart,
         

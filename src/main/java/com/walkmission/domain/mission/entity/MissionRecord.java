@@ -48,6 +48,8 @@ public class MissionRecord extends BaseTimeEntity {
 
     private Boolean isNewPlace;
     private Integer stepCount;
+    /** 출발부터 완료까지 걸린 시간(분). 완료 시 저장해 통계 합계에 쓴다 */
+    private Integer durationMinutes;
     private Integer beforeSurvey;
     private Integer afterSurvey;
 
@@ -122,6 +124,7 @@ public class MissionRecord extends BaseTimeEntity {
         this.afterSurvey = afterSurvey;
         this.stepCount = stepCount;
         this.completedAt = now;
+        this.durationMinutes = startedAt != null ? (int) java.time.Duration.between(startedAt, now).toMinutes() : null;
     }
 
     /** 다시 추천을 받아 출발 전 미션을 대체한다. 이유가 있으면 남긴다. */
@@ -162,6 +165,7 @@ public class MissionRecord extends BaseTimeEntity {
     public LocalDateTime getScheduledAt() { return scheduledAt; }
     public Boolean getIsNewPlace() { return isNewPlace; }
     public Integer getStepCount() { return stepCount; }
+    public Integer getDurationMinutes() { return durationMinutes; }
     public Integer getBeforeSurvey() { return beforeSurvey; }
     public Integer getAfterSurvey() { return afterSurvey; }
     public RejectReason getRejectReason() { return rejectReason; }

@@ -6,6 +6,7 @@ import com.walkmission.domain.reward.repository.BadgeRepository;
 import com.walkmission.domain.user.dto.PreferenceResponse;
 import com.walkmission.domain.user.dto.PreferenceUpdateRequest;
 import com.walkmission.domain.user.dto.UserProfileResponse;
+import com.walkmission.domain.user.dto.UserProfileUpdateRequest;
 import com.walkmission.domain.user.dto.UserSettingsUpdateRequest;
 import com.walkmission.domain.user.dto.UserSettingsUpdateResponse;
 import com.walkmission.domain.user.entity.User;
@@ -17,10 +18,13 @@ import com.walkmission.domain.user.repository.UserProfileRepository;
 import com.walkmission.domain.user.repository.UserRepository;
 import com.walkmission.domain.user.repository.UserSettingRepository;
 import com.walkmission.global.util.RegionUtils;
+import com.walkmission.global.util.TimeUtils;
 import com.walkmission.global.error.BusinessException;
 import com.walkmission.global.error.ErrorCode;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Map;
 
 @Service
 public class UserService {
@@ -61,6 +65,8 @@ public class UserService {
             user.getUserUuid(),
             user.getEmail(),
             user.getNickname(),
+            user.getRankingNickname(),
+            user.getBirthYear(),
             user.getProfileImageUrl(),
             new UserProfileResponse.RegionInfo(user.getRegionCode(), RegionUtils.nameOf(user.getRegionCode())),
             new UserProfileResponse.AssetInfo(profile.getCurrentPoint()),
@@ -72,21 +78,55 @@ public class UserService {
     }
 
     @Transactional
+    public UserProfileResponse updateProfile(Long userId, UserProfileUpdateRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        if (request.nickname() != null && request.nickname().isBlank()) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, Map.of("nickname", "공백일 수 없습니다"));
+        }
+        if (request.regionCode() != null && request.regionCode().isBlank()) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, Map.of("regionCode", "공백일 수 없습니다"));
+        }
+        if (request.birthYear() != null && request.birthYear() > TimeUtils.today().getYear()) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, Map.of("birthYear", "올해 이하의 연도여야 합니다"));
+        }
+
+        user.updateProfile(trim(request.nickname()), trim(request.regionCode()), request.birthYear(),
+                request.rankingNickname() != null ? request.rankingNickname().trim() : null);
+        return getProfile(userId);
+    }
+
+    private static String trim(String value) {
+        return value != null ? value.trim() : null;
+    }
+
+    @Transactional
     public UserSettingsUpdateResponse updateSettings(Long userId, UserSettingsUpdateRequest request) {
         UserSetting setting = userSettingRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
         setting.update(request);
+        return toSettingsResponse(setting, "설정이 성공적으로 변경되었습니다.");
+    }
 
+    @Transactional(readOnly = true)
+    public UserSettingsUpdateResponse getSettings(Long userId) {
+        UserSetting setting = userSettingRepository.findByUserId(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        return toSettingsResponse(setting, null);
+    }
+
+    private UserSettingsUpdateResponse toSettingsResponse(UserSetting setting, String message) {
         return new UserSettingsUpdateResponse(
             setting.getUser().getUserUuid(),
             setting.getAllAlarm(), setting.getStartAlarm(), setting.getMissionAlarm(),
             setting.getInsightAlarm(), setting.getRewardAlarm(),
-            setting.getQuietStart(), setting.getQuietEnd(),
+            setting.getQuietEnabled(), setting.getQuietStart(), setting.getQuietEnd(),
             setting.getRankingSetting(), setting.getNameSetting(),
             setting.getPlaceSetting(), setting.getFriendSetting(),
             setting.getUpdatedAt(),
-            "설정이 성공적으로 변경되었습니다."
+            message
         );
     }
 
