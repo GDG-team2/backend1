@@ -1,5 +1,6 @@
 package com.walkmission.domain.user.entity;
 
+import com.walkmission.domain.mission.entity.Budget;
 import com.walkmission.domain.mission.entity.MoveType;
 import com.walkmission.domain.mission.entity.PlaceCategory;
 import com.walkmission.domain.mission.entity.PlaceCategorySetConverter;
@@ -11,7 +12,7 @@ import java.util.Set;
 
 @Entity
 public class UserMissionPreference extends BaseTimeEntity {
-    public static final int DEFAULT_WALK_TIME = 30;
+    public static final int DEFAULT_WALK_TIME = 60;
     public static final int DEFAULT_WEEKLY_GOAL = 3;
 
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -44,7 +45,9 @@ public class UserMissionPreference extends BaseTimeEntity {
         this.weeklyGoal = DEFAULT_WEEKLY_GOAL;
     }
 
-    public void update(Integer walkTime, MoveType moveType, Set<PlaceCategory> categories, Integer weeklyGoal) {
+    public void update(Integer walkTime, MoveType moveType, Set<PlaceCategory> categories, Integer weeklyGoal,
+                       Budget budget) {
+        if (budget != null) this.spendLimit = budget.getLimit();
         if (walkTime != null) this.walkTime = walkTime;
         if (weeklyGoal != null) this.weeklyGoal = weeklyGoal;
         if (moveType != null) this.moveType = moveType;
@@ -57,6 +60,8 @@ public class UserMissionPreference extends BaseTimeEntity {
     public User getUser() { return user; }
     public int getWalkTime() { return walkTime != null ? walkTime : DEFAULT_WALK_TIME; }
     public Integer getSpendLimit() { return spendLimit; }
+    /** spend_limit(원)을 예산 선택지로. 설정하지 않았으면 상관없음 */
+    public Budget getBudget() { return Budget.fromLimit(spendLimit); }
     public MoveType getMoveType() { return moveType != null ? moveType : MoveType.WALK; }
     public int getWeeklyGoal() { return weeklyGoal != null ? weeklyGoal : DEFAULT_WEEKLY_GOAL; }
 

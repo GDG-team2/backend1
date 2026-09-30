@@ -12,6 +12,7 @@ public record CurrentMissionResponse(
     public record ActiveMissionInfo(
             @Schema(description = "미션 ID", example = "1001") Long missionId,
             @Schema(description = "미션 상태", example = "IN_PROGRESS") String status,
+            @Schema(description = "미션 제목", example = "화랑유원지 한 바퀴") String missionTitle,
             @Schema(description = "출발 일시 (READY 상태일 땐 null)") LocalDateTime startedAt,
             @Schema(description = "목적지 장소 정보") PlaceInfo place,
             @Schema(description = "예상 보상 포인트", example = "50") Integer estRewardPoint

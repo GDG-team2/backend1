@@ -10,6 +10,8 @@ public record MissionCompleteResponse(
         @Schema(description = "미션 상태", example = "COMPLETED") String status,
         @Schema(description = "완료 일시") LocalDateTime completedAt,
         @Schema(description = "기록된 걸음 수", example = "1850") Integer stepCount,
+        @Schema(description = "처음 가본 장소인지 (\"새로운 장소 +1\")", example = "true") Boolean isNewPlace,
+        @Schema(description = "출발부터 완료까지 걸린 시간(분)", example = "54") Integer durationMinutes,
         @Schema(description = "보상 포인트 정보") RewardInfo reward,
         @Schema(description = "랭킹 점수 정보") RankingInfo ranking,
         @Schema(description = "주간 리듬 정보") RhythmInfo rhythm,

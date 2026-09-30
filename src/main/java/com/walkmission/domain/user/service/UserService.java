@@ -98,7 +98,8 @@ public class UserService {
     @Transactional
     public PreferenceResponse updatePreference(Long userId, PreferenceUpdateRequest request) {
         UserMissionPreference preference = getPreferenceEntity(userId);
-        preference.update(request.walkTime(), request.moveType(), request.categories(), request.weeklyGoal());
+        preference.update(request.walkTime(), request.moveType(), request.categories(), request.weeklyGoal(),
+                request.budget());
         if (request.weeklyGoal() != null) rhythmService.evaluate(userId); // 목표를 낮춰 이미 채웠다면 바로 반영
         return toPreferenceResponse(preference);
     }
@@ -113,6 +114,7 @@ public class UserService {
                 preference.getWalkTime(),
                 preference.getMoveType(),
                 preference.getEffectiveCategories().stream().sorted().toList(),
-                preference.getWeeklyGoal());
+                preference.getWeeklyGoal(),
+                preference.getBudget());
     }
 }

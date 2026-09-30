@@ -1,11 +1,7 @@
 package com.walkmission.domain.mission.service;
 
 import com.walkmission.domain.mission.dto.*;
-import com.walkmission.domain.mission.entity.MissionRecord;
-import com.walkmission.domain.mission.entity.MissionStatus;
-import com.walkmission.domain.mission.entity.MoveType;
-import com.walkmission.domain.mission.entity.PlaceCategory;
-import com.walkmission.domain.mission.entity.Place;
+import com.walkmission.domain.mission.entity.*;
 import com.walkmission.domain.mission.repository.MissionRecordRepository;
 import com.walkmission.domain.mission.repository.PlaceRepository;
 import com.walkmission.domain.ranking.service.RankingService;
@@ -17,27 +13,28 @@ import com.walkmission.domain.user.entity.UserMissionPreference;
 import com.walkmission.domain.user.repository.UserMissionPreferenceRepository;
 import com.walkmission.domain.user.repository.UserRepository;
 import com.walkmission.domain.user.service.RhythmService;
-import com.walkmission.global.external.kakao.KakaoPlace;
-import com.walkmission.global.util.GeoUtils;
 import com.walkmission.global.error.BusinessException;
 import com.walkmission.global.error.ErrorCode;
+import com.walkmission.global.external.kakao.KakaoPlace;
+import com.walkmission.global.util.GeoUtils;
+import com.walkmission.global.util.TimeUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.EnumSet;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 @Service
 public class MissionService {
     private static final double ARRIVAL_RADIUS_METERS = 80;
     private static final int ARRIVAL_DWELL_SECONDS = 30;
     private static final int RECENT_PLACE_EXCLUDE_DAYS = 7;
+    /** "너무 멀어요"로 거절했을 때 거리 배율 */
+    private static final double TOO_FAR_DISTANCE_FACTOR = 0.7;
+    /** 같은 날 "멀었어요/피곤해요"로 포기했을 때 거리 배율 */
+    private static final double AFTER_TIRING_ABORT_DISTANCE_FACTOR = 0.8;
 
     private final MissionRecordRepository missionRecordRepository;
     private final PlaceRepository placeRepository;
@@ -47,11 +44,13 @@ public class MissionService {
     private final UserMissionPreferenceRepository preferenceRepository;
     private final PlaceRecommender placeRecommender;
     private final RhythmService rhythmService;
+    private final MissionTextWriter missionTextWriter;
 
     public MissionService(MissionRecordRepository missionRecordRepository, PlaceRepository placeRepository,
                           UserRepository userRepository, RewardService rewardService,
                           RankingService rankingService, UserMissionPreferenceRepository preferenceRepository,
-                          PlaceRecommender placeRecommender, RhythmService rhythmService) {
+                          PlaceRecommender placeRecommender, RhythmService rhythmService,
+                          MissionTextWriter missionTextWriter) {
         this.missionRecordRepository = missionRecordRepository;
         this.placeRepository = placeRepository;
         this.userRepository = userRepository;
@@ -60,8 +59,13 @@ public class MissionService {
         this.preferenceRepository = preferenceRepository;
         this.placeRecommender = placeRecommender;
         this.rhythmService = rhythmService;
+        this.missionTextWriter = missionTextWriter;
     }
 
+    /**
+     * 미션 추천. 요청 값 > 선호 설정 > 기본값 순으로 조건을 정하고,
+     * 기분·예산·거절 이유·오늘의 포기 이유를 거리와 범주에 반영한다.
+     */
     @Transactional
     public MissionRecommendResponse recommend(Long userId, MissionRecommendRequest request) {
         User user = userRepository.findById(userId)
@@ -71,51 +75,103 @@ public class MissionService {
             throw new BusinessException(ErrorCode.ACTIVE_MISSION_EXISTS);
         }
 
-        // 요청 값 > 선호 설정 > 기본값 순으로 적용
         UserMissionPreference preference = preferenceRepository.findByUserId(userId).orElse(null);
         int walkTime = preference != null ? preference.getWalkTime() : UserMissionPreference.DEFAULT_WALK_TIME;
         MoveType moveType = request.moveType() != null ? request.moveType()
                 : preference != null ? preference.getMoveType() : MoveType.WALK;
-        Set<PlaceCategory> categories = request.category() != null ? EnumSet.of(request.category())
-                : preference != null ? preference.getEffectiveCategories() : EnumSet.allOf(PlaceCategory.class);
+        Budget budget = request.budget() != null ? request.budget()
+                : preference != null ? preference.getBudget() : Budget.ANY;
+        Set<PlaceCategory> categories = EnumSet.copyOf(request.category() != null ? EnumSet.of(request.category())
+                : preference != null ? preference.getEffectiveCategories() : EnumSet.allOf(PlaceCategory.class));
+        Mood mood = request.mood();
+        RejectReason rejectReason = request.rejectReason();
+        double distanceFactor = mood != null ? mood.getDistanceFactor() : 1.0;
 
-        // 최근 완료한 곳과, 다시 추천받기 전의 장소는 제외한다.
+        // 최근 완료한 곳은 제외
         LocalDateTime now = LocalDateTime.now();
         Set<String> excludedKakaoIds = new HashSet<>(missionRecordRepository.findPlaceKakaoIdsCompletedSince(
                 userId, MissionStatus.COMPLETED, now.minusDays(RECENT_PLACE_EXCLUDE_DAYS)));
 
-        // 출발 전(READY) 미션은 새 추천으로 대체한다.
-        missionRecordRepository.findByUserIdAndStatus(userId, MissionStatus.READY).forEach(mission -> {
-            excludedKakaoIds.add(mission.getPlace().getKakaoPlaceId());
-            mission.abort(now);
-        });
+        // 다시 추천: 출발 전(READY) 미션을 대체하고 그 장소는 제외, 거절 이유를 이번 추천에 반영
+        PlaceCategory rejectedCategory = null;
+        for (MissionRecord previous : missionRecordRepository.findByUserIdAndStatus(userId, MissionStatus.READY)) {
+            excludedKakaoIds.add(previous.getPlace().getKakaoPlaceId());
+            rejectedCategory = previous.getPlaceCategory();
+            previous.replaceByNewRecommendation(rejectReason, now);
+        }
+        if (rejectReason == RejectReason.TOO_FAR) distanceFactor *= TOO_FAR_DISTANCE_FACTOR;
+        if (rejectReason == RejectReason.NO_SPENDING) budget = Budget.FREE;
+        if (rejectReason == RejectReason.DISLIKE_ACTIVITY && rejectedCategory != null && categories.size() > 1) {
+            categories.remove(rejectedCategory);
+        }
 
-        PlaceRecommender.Candidate candidate = placeRecommender.recommend(
-                request.latitude().doubleValue(), request.longitude().doubleValue(),
-                walkTime, moveType, categories, excludedKakaoIds);
+        // 오늘 "멀었어요/피곤해요"로 멈춘 적이 있으면 더 가까운 곳부터
+        if (missionRecordRepository.existsByUserIdAndStatusAndAbortReasonInAndAbortedAtGreaterThanEqual(
+                userId, MissionStatus.ABORTED, shorteningAbortReasons(), TimeUtils.today().atStartOfDay())) {
+            distanceFactor *= AFTER_TIRING_ABORT_DISTANCE_FACTOR;
+        }
+
+        // 예산을 넘는 범주는 제외
+        Budget effectiveBudget = budget;
+        categories.removeIf(c -> !effectiveBudget.allows(c.getEstimatedCost()));
+        if (categories.isEmpty()) {
+            throw new BusinessException(ErrorCode.NO_NEARBY_PLACE, Map.of("reason", "BUDGET"));
+        }
+
+        // 기분이 선호하는 범주를 먼저 시도
+        List<PlaceCategory> categoryOrder = orderCategories(categories, mood);
+
+        // 새로운 곳을 원하면(심심함·꿀꿀함, "이미 가본 곳이에요") 가본 적 없는 곳만. 없으면 조건을 풀어서 다시 찾는다.
+        boolean onlyNewPlaces = rejectReason == RejectReason.ALREADY_VISITED || (mood != null && mood.prefersNewPlace());
+        PlaceRecommender.Candidate candidate;
+        if (onlyNewPlaces) {
+            Set<String> withVisited = new HashSet<>(excludedKakaoIds);
+            withVisited.addAll(missionRecordRepository.findAllCompletedPlaceKakaoIds(userId));
+            try {
+                candidate = placeRecommender.recommend(recommendRequest(request, walkTime, moveType, categoryOrder,
+                        distanceFactor, withVisited));
+            } catch (BusinessException e) {
+                if (e.getErrorCode() != ErrorCode.NO_NEARBY_PLACE) throw e;
+                candidate = placeRecommender.recommend(recommendRequest(request, walkTime, moveType, categoryOrder,
+                        distanceFactor, excludedKakaoIds));
+            }
+        } else {
+            candidate = placeRecommender.recommend(recommendRequest(request, walkTime, moveType, categoryOrder,
+                    distanceFactor, excludedKakaoIds));
+        }
+
         Place place = findOrCreatePlace(candidate.place());
+        PlaceCategory category = candidate.category();
         boolean isNewPlace = !missionRecordRepository.existsByUserIdAndPlaceIdAndStatus(
                 userId, place.getId(), MissionStatus.COMPLETED);
+        String title = missionTextWriter.title(place.getName(), category);
+        String reason = missionTextWriter.reason(userId, category, isNewPlace, mood, rejectReason, budget);
 
         MissionRecord mission = missionRecordRepository.save(
-                new MissionRecord(user, place, candidate.category(), isNewPlace));
+                new MissionRecord(user, place, category, isNewPlace, title, reason, mood));
 
+        int distance = candidate.distanceMeters();
         return new MissionRecommendResponse(
                 mission.getId(),
                 mission.getStatus().name(),
-                new MissionRecommendResponse.PlaceInfo(
-                        place.getId(), place.getKakaoPlaceId(), place.getName(), place.getCategory(),
-                        place.getRoadAddress(), place.getLatitude(), place.getLongitude(), place.getPlaceUrl()),
-                candidate.distanceMeters(),
-                PlaceRecommender.estimateMinutes(candidate.distanceMeters(), moveType),
+                title,
+                reason,
+                toPlaceInfo(place),
+                distance,
+                PlaceRecommender.roundTripRouteMeters(distance),
+                PlaceRecommender.oneWayMinutes(distance, moveType),
+                PlaceRecommender.totalMinutes(distance, moveType, category),
+                category.getEstimatedCost(),
+                isNewPlace,
                 RewardPolicy.MISSION_COMPLETE_POINT,
-                candidate.category(),
-                moveType
+                category,
+                moveType,
+                budget
         );
     }
 
     @Transactional
-    public MissionStartResponse start(Long userId, Long missionId, MissionStartRequest request) {
+    public MissionStartResponse start(Long userId, Long missionId) {
         MissionRecord mission = getMission(userId, missionId);
         requireStatus(mission, MissionStatus.READY);
 
@@ -123,8 +179,7 @@ public class MissionService {
             throw new BusinessException(ErrorCode.ACTIVE_MISSION_EXISTS);
         }
 
-        Integer beforeSurvey = request != null ? request.beforeSurveyScore() : null;
-        mission.start(beforeSurvey, LocalDateTime.now());
+        mission.start(LocalDateTime.now());
 
         return new MissionStartResponse(
                 mission.getId(), mission.getStatus().name(), mission.getStartedAt(),
@@ -173,16 +228,21 @@ public class MissionService {
         User user = mission.getUser();
         int earnedPoint = RewardPolicy.MISSION_COMPLETE_POINT;
         int currentTotalPoint = rewardService.earnPoint(
-                user, earnedPoint, "미션 완료 보상 - " + mission.getPlaceNameSnapshot());
+                user, earnedPoint, "미션 완료 보상 - " + mission.getMissionTitle());
         RhythmService.RhythmResult rhythm = rhythmService.evaluate(user.getId());
         RankingService.ScoreResult score = rankingService.addMissionScore(user, mission);
         List<Badge> newBadges = rewardService.awardBadges(user);
+
+        Integer durationMinutes = mission.getStartedAt() == null ? null
+                : (int) Duration.between(mission.getStartedAt(), mission.getCompletedAt()).toMinutes();
 
         return new MissionCompleteResponse(
                 mission.getId(),
                 mission.getStatus().name(),
                 mission.getCompletedAt(),
                 mission.getStepCount(),
+                Boolean.TRUE.equals(mission.getIsNewPlace()),
+                durationMinutes,
                 new MissionCompleteResponse.RewardInfo(earnedPoint, currentTotalPoint),
                 new MissionCompleteResponse.RankingInfo(score.isParticipant(), score.earnedScore(), score.bonusScore(),
                         score.weeklyScore(), score.scoredMissionCount(), score.maxScoredMissions()),
@@ -196,16 +256,19 @@ public class MissionService {
     }
 
     @Transactional
-    public MissionAbortResponse abort(Long userId, Long missionId) {
+    public MissionAbortResponse abort(Long userId, Long missionId, MissionAbortRequest request) {
         MissionRecord mission = getMission(userId, missionId);
         if (!mission.getStatus().isActive()) {
             throw new BusinessException(ErrorCode.INVALID_MISSION_STATUS, Map.of("currentStatus", mission.getStatus().name()));
         }
 
-        mission.abort(LocalDateTime.now());
+        AbortReason reason = request != null ? request.reason() : null;
+        Integer moved = request != null ? request.movedDistanceMeters() : null;
+        mission.abort(reason, moved, LocalDateTime.now());
 
+        String note = reason != null && reason.shortensNextMission() ? "오늘은 더 가까운 곳부터 제안할게요." : null;
         return new MissionAbortResponse(
-                mission.getId(), mission.getStatus().name(), mission.getAbortedAt(), "산책 미션을 포기했습니다.");
+                mission.getId(), mission.getStatus().name(), mission.getAbortedAt(), moved, note, "멈춰도 기록은 남아요.");
     }
 
     @Transactional(readOnly = true)
@@ -216,6 +279,7 @@ public class MissionService {
                     return new CurrentMissionResponse(true, new CurrentMissionResponse.ActiveMissionInfo(
                             mission.getId(),
                             mission.getStatus().name(),
+                            mission.getMissionTitle(),
                             mission.getStartedAt(),
                             new CurrentMissionResponse.PlaceInfo(
                                     place.getId(), place.getKakaoPlaceId(), place.getName(), place.getCategory(),
@@ -224,6 +288,37 @@ public class MissionService {
                             RewardPolicy.MISSION_COMPLETE_POINT));
                 })
                 .orElse(new CurrentMissionResponse(false, null));
+    }
+
+    private PlaceRecommender.Request recommendRequest(MissionRecommendRequest request, int walkTime, MoveType moveType,
+                                                      List<PlaceCategory> categoryOrder, double distanceFactor,
+                                                      Set<String> excludedKakaoIds) {
+        return new PlaceRecommender.Request(request.latitude().doubleValue(), request.longitude().doubleValue(),
+                walkTime, moveType, categoryOrder, distanceFactor, excludedKakaoIds);
+    }
+
+    /** 기분이 선호하는 범주를 앞에, 나머지를 뒤에 두고 각각 섞는다. */
+    private List<PlaceCategory> orderCategories(Set<PlaceCategory> categories, Mood mood) {
+        List<PlaceCategory> preferred = new ArrayList<>();
+        List<PlaceCategory> others = new ArrayList<>();
+        for (PlaceCategory c : categories) {
+            if (mood != null && mood.getPreferredCategories().contains(c)) preferred.add(c);
+            else others.add(c);
+        }
+        Collections.shuffle(preferred);
+        Collections.shuffle(others);
+        preferred.addAll(others);
+        return preferred;
+    }
+
+    private static List<AbortReason> shorteningAbortReasons() {
+        return Arrays.stream(AbortReason.values()).filter(AbortReason::shortensNextMission).toList();
+    }
+
+    private MissionRecommendResponse.PlaceInfo toPlaceInfo(Place place) {
+        return new MissionRecommendResponse.PlaceInfo(
+                place.getId(), place.getKakaoPlaceId(), place.getName(), place.getCategory(),
+                place.getRoadAddress(), place.getLatitude(), place.getLongitude(), place.getPlaceUrl());
     }
 
     /** 카카오 장소를 Place 테이블에 저장(이미 있으면 재사용)한다. */
