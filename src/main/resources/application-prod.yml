@@ -1,0 +1,28 @@
+# 배포 서버용 설정. 비밀값은 모두 환경변수로 받고 기본값을 두지 않는다(없으면 서버가 뜨지 않음).
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    hikari:
+      # 무료 DB(Neon)의 연결 수 제한에 맞춰 작게
+      maximum-pool-size: 5
+      minimum-idle: 1
+  jpa:
+    hibernate:
+      # 개발용 서버라 테이블을 자동으로 맞춘다. 실제 서비스 전에는 마이그레이션 도구로 바꿀 것
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+
+server:
+  # 프록시(HTTPS) 뒤에서 Swagger가 https 주소를 쓰도록
+  forward-headers-strategy: framework
+
+jwt:
+  secret-key: ${JWT_SECRET}
+
+kakao:
+  rest-api-key: ${KAKAO_REST_API_KEY}

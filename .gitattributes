@@ -1,0 +1,4 @@
+# gradlew는 리눅스(Docker)에서 실행되므로 항상 LF
+gradlew text eol=lf
+*.sh text eol=lf
+gradlew.bat text eol=crlf
