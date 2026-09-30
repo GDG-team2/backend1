@@ -3,6 +3,9 @@ package com.walkmission.global.config;
 import com.walkmission.global.auth.LoginUser;
 import com.walkmission.global.error.ErrorResponse;
 import io.swagger.v3.core.converter.ModelConverters;
+import io.swagger.v3.core.jackson.ModelResolver;
+import io.swagger.v3.core.jackson.TypeNameResolver;
+import org.springdoc.core.providers.ObjectMapperProvider;
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Info;
@@ -30,6 +33,21 @@ public class SwaggerConfig {
         SpringDocUtils.getConfig().replaceWithSchema(LocalTime.class,
                 new StringSchema().format("time").example("22:00:00")
                         .description("시각 문자열. 응답은 \"HH:mm:ss\", 요청은 \"HH:mm\"과 \"HH:mm:ss\" 모두 가능 (시는 두 자리)"));
+    }
+
+    /**
+     * 응답 안의 하위 record 이름이 겹치면(예: UserProfileResponse.RhythmInfo와 MissionCompleteResponse.RhythmInfo)
+     * 명세에서 하나로 합쳐져 서로 덮어쓰므로, 스키마 이름 앞에 바깥 클래스 이름을 붙인다.
+     */
+    @Bean
+    public ModelResolver nestedTypeNameModelResolver(ObjectMapperProvider objectMapperProvider) {
+        return new ModelResolver(objectMapperProvider.jsonMapper(), new TypeNameResolver() {
+            @Override
+            protected String getNameOfClass(Class<?> cls) {
+                Class<?> enclosing = cls.getEnclosingClass();
+                return enclosing != null ? enclosing.getSimpleName() + cls.getSimpleName() : super.getNameOfClass(cls);
+            }
+        });
     }
 
     @Bean

@@ -35,14 +35,14 @@
     }
   ],
   "paths": {
-    "/api/v1/missions/{missionId}/start": {
-      "post": {
+    "/api/v1/missions/{missionId}/schedule": {
+      "put": {
         "tags": [
           "Mission Domain"
         ],
-        "summary": "산책 출발",
-        "description": "추천된 미션을 수락하고 산책을 시작합니다. 사전 설문 점수는 선택이며, 이미 진행 중인 미션이 있으면 409를 반환합니다.",
-        "operationId": "startMission",
+        "summary": "출발 약속 (예약) / 시간 변경",
+        "description": "추천받은 미션(READY)의 출발 시각을 약속합니다. 이미 약속한 미션에 다시 보내면 시간이 바뀝니다. 약속한 미션은 여러 개 둘 수 있고, 다시 추천을 받아도 대체되지 않습니다. 약속을 취소하려면 포기(abort)를 호출합니다.",
+        "operationId": "scheduleMission",
         "parameters": [
           {
             "name": "missionId",
@@ -58,11 +58,65 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/MissionStartRequest"
+                "$ref": "#/components/schemas/MissionScheduleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledMissionInfo"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "요청 오류 (code로 원인 구분: INVALID_INPUT, TOKEN_EXPIRED, MISSION_NOT_FOUND 등)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "서버 오류 (INTERNAL_ERROR, PLACE_SEARCH_FAILED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
-        },
+        }
+      }
+    },
+    "/api/v1/missions/{missionId}/start": {
+      "post": {
+        "tags": [
+          "Mission Domain"
+        ],
+        "summary": "산책 출발",
+        "description": "추천된 미션을 수락하고 산책을 시작합니다. 요청 본문은 없습니다. 이미 진행 중인 미션이 있으면 409를 반환합니다.",
+        "operationId": "startMission",
+        "parameters": [
+          {
+            "name": "missionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -103,7 +157,7 @@
           "Mission Domain"
         ],
         "summary": "사후 설문 제출 및 최종 보상 정산",
-        "description": "도착 후 설문을 제출하고 미션을 최종 완료하여 포인트를 적립합니다. (랭킹/스트릭/배지 정산은 추후 반영)",
+        "description": "도착 후 사후 기분 점수를 제출하고 미션을 완료합니다. 포인트, 주간 리듬, 랭킹 점수(주 3회까지, 새 범주 +20), 배지를 정산합니다.",
         "operationId": "completeMission",
         "parameters": [
           {
@@ -166,7 +220,7 @@
           "Mission Domain"
         ],
         "summary": "GPS 목적지 도착 인증",
-        "description": "목적지 반경 50m 이내에 도달했는지 확인하고 도착 인증을 처리합니다. 50m를 초과하면 400 NOT_ENOUGH_DISTANCE와 남은 거리를 반환합니다.",
+        "description": "목적지 반경 80m 안에서 30초 머무르면 도착으로 인정합니다. 반경 안에서 처음 요청하면 status는 IN_PROGRESS이고, remainingDwellSeconds만큼 기다린 뒤 다시 요청하면 ARRIVED가 됩니다. 80m 밖이면 400 NOT_ENOUGH_DISTANCE와 남은 거리를 반환하고 체류 시간을 초기화합니다.",
         "operationId": "arriveMission",
         "parameters": [
           {
@@ -229,7 +283,7 @@
           "Mission Domain"
         ],
         "summary": "산책 포기/중단",
-        "description": "진행 중인 미션을 포기합니다.",
+        "description": "진행 중인 미션을 멈춥니다. 이유와 이동 거리를 선택으로 보낼 수 있고, 이유가 \"멀었어요/피곤해요\"면 같은 날 다음 추천이 더 가까워집니다.",
         "operationId": "abortMission",
         "parameters": [
           {
@@ -242,6 +296,15 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MissionAbortRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "OK",
@@ -282,7 +345,7 @@
           "Mission Domain"
         ],
         "summary": "오늘의 미션 추천 생성",
-        "description": "사용자의 현재 위치를 기반으로 반경 3km 이내에서 가장 가까운 장소를 미션 목적지로 추천합니다. 출발 전(READY) 미션이 있으면 새 추천으로 대체됩니다.",
+        "description": "현재 위치와 선호 설정(전체 외출 시간·이동수단·범주·예산)으로 카카오 장소 중 하나를 무작위로 추천합니다. 기분(mood)과 이번 추천에만 적용할 조건을 함께 보낼 수 있고, 다시 추천받으면 출발 전(READY) 미션은 대체되며 거절 이유(rejectReason)가 반영됩니다.",
         "operationId": "recommendMission",
         "requestBody": {
           "content": {
@@ -485,6 +548,46 @@
       }
     },
     "/api/v1/users/settings": {
+      "get": {
+        "tags": [
+          "User & Auth Domain"
+        ],
+        "summary": "알림·공개 설정 조회",
+        "description": "설정 화면에 표시할 현재 알림, 조용한 시간, 공개 설정 값을 조회합니다. 응답 형식은 설정 변경과 같고 message는 null입니다.",
+        "operationId": "getSettings",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserSettingsUpdateResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "요청 오류 (code로 원인 구분: INVALID_INPUT, TOKEN_EXPIRED, MISSION_NOT_FOUND 등)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "서버 오류 (INTERNAL_ERROR, PLACE_SEARCH_FAILED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
       "patch": {
         "tags": [
           "User & Auth Domain"
@@ -508,6 +611,97 @@
               "*/*": {
                 "schema": {
                   "$ref": "#/components/schemas/UserSettingsUpdateResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "요청 오류 (code로 원인 구분: INVALID_INPUT, TOKEN_EXPIRED, MISSION_NOT_FOUND 등)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "서버 오류 (INTERNAL_ERROR, PLACE_SEARCH_FAILED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/profile": {
+      "get": {
+        "tags": [
+          "User & Auth Domain"
+        ],
+        "summary": "사용자 프로필 조회",
+        "operationId": "getProfile",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserProfileResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "요청 오류 (code로 원인 구분: INVALID_INPUT, TOKEN_EXPIRED, MISSION_NOT_FOUND 등)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "서버 오류 (INTERNAL_ERROR, PLACE_SEARCH_FAILED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "User & Auth Domain"
+        ],
+        "summary": "프로필 수정",
+        "description": "닉네임, 생활권(동네 코드), 출생 연도, 랭킹용 닉네임 중 보낸 필드만 변경하고, 변경된 프로필을 돌려줍니다. 랭킹용 닉네임에 빈 문자열을 보내면 설정을 지우고 닉네임이 표시됩니다.",
+        "operationId": "updateProfile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserProfileUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserProfileResponse"
                 }
               }
             }
@@ -600,47 +794,6 @@
               "*/*": {
                 "schema": {
                   "$ref": "#/components/schemas/PreferenceResponse"
-                }
-              }
-            }
-          },
-          "4XX": {
-            "description": "요청 오류 (code로 원인 구분: INVALID_INPUT, TOKEN_EXPIRED, MISSION_NOT_FOUND 등)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "5XX": {
-            "description": "서버 오류 (INTERNAL_ERROR, PLACE_SEARCH_FAILED)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/users/profile": {
-      "get": {
-        "tags": [
-          "User & Auth Domain"
-        ],
-        "summary": "사용자 프로필 조회",
-        "operationId": "getProfile",
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "*/*": {
-                "schema": {
-                  "$ref": "#/components/schemas/UserProfileResponse"
                 }
               }
             }
@@ -828,6 +981,275 @@
         }
       }
     },
+    "/api/v1/missions/{missionId}": {
+      "get": {
+        "tags": [
+          "Mission Domain"
+        ],
+        "summary": "미션 기록 상세",
+        "description": "미션 하나의 장소, 소요 시간, 기분 변화(전 → 후), 타임라인(약속·출발·도착·완료/중단)을 조회합니다. 진행 중이거나 포기한 미션도 조회할 수 있습니다.",
+        "operationId": "getMissionDetail",
+        "parameters": [
+          {
+            "name": "missionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/MissionDetailResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "요청 오류 (code로 원인 구분: INVALID_INPUT, TOKEN_EXPIRED, MISSION_NOT_FOUND 등)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "서버 오류 (INTERNAL_ERROR, PLACE_SEARCH_FAILED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/missions/scheduled": {
+      "get": {
+        "tags": [
+          "Mission Domain"
+        ],
+        "summary": "예정 미션 목록",
+        "description": "출발을 약속한 미션을 가까운 시각 순으로 조회합니다. 시각이 지나도 패널티 없이 그대로 출발할 수 있습니다(isOverdue).",
+        "operationId": "getScheduledMissions",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledMissionsResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "요청 오류 (code로 원인 구분: INVALID_INPUT, TOKEN_EXPIRED, MISSION_NOT_FOUND 등)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "서버 오류 (INTERNAL_ERROR, PLACE_SEARCH_FAILED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/missions/map": {
+      "get": {
+        "tags": [
+          "Mission Domain"
+        ],
+        "summary": "내 지도",
+        "description": "기간 내 다녀온 장소(지도 핀), 외출 횟수·새 장소 수·이동 거리 통계, 최근 기록 5건을 조회합니다. period 기본값은 MONTH입니다.",
+        "operationId": "getMap",
+        "parameters": [
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "WEEK",
+                "MONTH",
+                "ALL"
+              ]
+            }
+          },
+          {
+            "name": "yearMonth",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/MissionMapResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "요청 오류 (code로 원인 구분: INVALID_INPUT, TOKEN_EXPIRED, MISSION_NOT_FOUND 등)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "서버 오류 (INTERNAL_ERROR, PLACE_SEARCH_FAILED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/missions/history": {
+      "get": {
+        "tags": [
+          "Mission Domain"
+        ],
+        "summary": "활동 기록 목록",
+        "description": "완료한 미션을 최신순으로 조회합니다. period(WEEK 이번 주, MONTH 월간, ALL 전체, 기본 MONTH), yearMonth(월간일 때 \"2026-08\", 생략하면 이번 달), category, freeOnly(예상 비용 0원 범주만)로 거를 수 있고, summary는 필터에 맞는 전체 기록의 요약입니다.",
+        "operationId": "getHistory",
+        "parameters": [
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "WEEK",
+                "MONTH",
+                "ALL"
+              ]
+            }
+          },
+          {
+            "name": "yearMonth",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "WALK",
+                "CAFE",
+                "SIGHTSEEING",
+                "EXHIBITION",
+                "FOOD"
+              ]
+            }
+          },
+          {
+            "name": "freeOnly",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/MissionHistoryResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "요청 오류 (code로 원인 구분: INVALID_INPUT, TOKEN_EXPIRED, MISSION_NOT_FOUND 등)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "서버 오류 (INTERNAL_ERROR, PLACE_SEARCH_FAILED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/missions/current": {
       "get": {
         "tags": [
@@ -873,19 +1295,97 @@
   },
   "components": {
     "schemas": {
-      "MissionStartRequest": {
+      "MissionScheduleRequest": {
+        "required": [
+          "departAt"
+        ],
         "type": "object",
         "properties": {
-          "beforeSurveyScore": {
-            "maximum": 5,
-            "minimum": 1,
-            "type": "integer",
-            "description": "사전 설문 별점 (1~5, 선택)",
-            "format": "int32",
-            "example": 3
+          "departAt": {
+            "type": "string",
+            "description": "출발 약속 시각 (지금부터 14일 이내, 한국 시간)",
+            "format": "date-time"
           }
         },
-        "description": "미션 출발 요청 DTO (본문 생략 가능)"
+        "description": "출발 약속 요청 DTO"
+      },
+      "ScheduledMissionInfo": {
+        "type": "object",
+        "properties": {
+          "missionId": {
+            "type": "integer",
+            "description": "미션 ID",
+            "format": "int64",
+            "example": 1001
+          },
+          "missionTitle": {
+            "type": "string",
+            "description": "미션 제목",
+            "example": "화랑유원지 한 바퀴"
+          },
+          "scheduledAt": {
+            "type": "string",
+            "description": "출발 약속 시각",
+            "format": "date-time"
+          },
+          "minutesUntilDeparture": {
+            "type": "integer",
+            "description": "출발까지 남은 분 (지났으면 0)",
+            "format": "int32",
+            "example": 42
+          },
+          "isOverdue": {
+            "type": "boolean",
+            "description": "약속 시각이 지났는지 (지나도 패널티 없이 출발 가능)",
+            "example": false
+          },
+          "placeName": {
+            "type": "string",
+            "description": "장소 이름",
+            "example": "화랑유원지"
+          },
+          "placeCategory": {
+            "type": "string",
+            "description": "범주",
+            "example": "WALK",
+            "enum": [
+              "WALK",
+              "CAFE",
+              "SIGHTSEEING",
+              "EXHIBITION",
+              "FOOD"
+            ]
+          },
+          "moveType": {
+            "type": "string",
+            "description": "이동수단",
+            "example": "WALK",
+            "enum": [
+              "WALK",
+              "PUBLIC_TRANSIT",
+              "BIKE"
+            ]
+          },
+          "oneWayMinutes": {
+            "type": "integer",
+            "description": "예상 편도 소요 시간(분)",
+            "format": "int32",
+            "example": 17
+          },
+          "totalMinutes": {
+            "type": "integer",
+            "description": "전체 예상 시간(분)",
+            "format": "int32",
+            "example": 52
+          },
+          "estCost": {
+            "type": "integer",
+            "description": "예상 비용(원)",
+            "format": "int32",
+            "example": 0
+          }
+        },
+        "description": "출발을 약속한 미션"
       },
       "MissionStartResponse": {
         "type": "object",
@@ -937,33 +1437,6 @@
         },
         "description": "미션 완료 및 설문 제출 요청 DTO"
       },
-      "BadgeInfo": {
-        "type": "object",
-        "properties": {
-          "badgeId": {
-            "type": "integer",
-            "description": "획득한 배지 ID",
-            "format": "int64",
-            "example": 2
-          },
-          "badgeName": {
-            "type": "string",
-            "description": "배지 이름",
-            "example": "공원 탐험가"
-          },
-          "description": {
-            "type": "string",
-            "description": "배지 설명",
-            "example": "공원 카테고리의 장소를 3번 방문했습니다."
-          },
-          "iconUrl": {
-            "type": "string",
-            "description": "배지 아이콘 URL",
-            "example": "https://example.com/badges/2.png"
-          }
-        },
-        "description": "새로 획득한 배지 목록"
-      },
       "MissionCompleteResponse": {
         "type": "object",
         "properties": {
@@ -989,49 +1462,105 @@
             "format": "int32",
             "example": 1850
           },
+          "isNewPlace": {
+            "type": "boolean",
+            "description": "처음 가본 장소인지 (\"새로운 장소 +1\")",
+            "example": true
+          },
+          "durationMinutes": {
+            "type": "integer",
+            "description": "출발부터 완료까지 걸린 시간(분)",
+            "format": "int32",
+            "example": 54
+          },
           "reward": {
-            "$ref": "#/components/schemas/RewardInfo"
+            "$ref": "#/components/schemas/MissionCompleteResponseRewardInfo"
           },
           "ranking": {
-            "$ref": "#/components/schemas/RankingInfo"
+            "$ref": "#/components/schemas/MissionCompleteResponseRankingInfo"
           },
-          "streak": {
-            "$ref": "#/components/schemas/StreakInfo"
+          "rhythm": {
+            "$ref": "#/components/schemas/MissionCompleteResponseRhythmInfo"
           },
           "newBadges": {
             "type": "array",
             "description": "새로 획득한 배지 목록",
             "items": {
-              "$ref": "#/components/schemas/BadgeInfo"
+              "$ref": "#/components/schemas/MissionCompleteResponseBadgeInfo"
             }
           }
         },
         "description": "미션 완료 및 정산 응답 DTO"
       },
-      "RankingInfo": {
+      "MissionCompleteResponseBadgeInfo": {
+        "type": "object",
+        "properties": {
+          "badgeId": {
+            "type": "integer",
+            "description": "획득한 배지 ID",
+            "format": "int64",
+            "example": 2
+          },
+          "badgeName": {
+            "type": "string",
+            "description": "배지 이름",
+            "example": "새 길 발견"
+          },
+          "description": {
+            "type": "string",
+            "description": "배지 설명",
+            "example": "서로 다른 장소 5곳을 방문했어요."
+          },
+          "iconUrl": {
+            "type": "string",
+            "description": "배지 아이콘 URL",
+            "example": "https://example.com/badges/2.png"
+          }
+        },
+        "description": "새로 획득한 배지 목록"
+      },
+      "MissionCompleteResponseRankingInfo": {
         "type": "object",
         "properties": {
           "isParticipant": {
             "type": "boolean",
-            "description": "랭킹 참여 여부",
+            "description": "랭킹 참여 여부 (랭킹 공개 설정)",
             "example": true
           },
           "earnedScore": {
             "type": "integer",
-            "description": "이번 미션으로 획득한 랭킹 점수",
+            "description": "이번 미션으로 얻은 점수 (보너스 포함). 이번 주 반영 한도를 넘었으면 0",
             "format": "int32",
-            "example": 100
+            "example": 120
+          },
+          "bonusScore": {
+            "type": "integer",
+            "description": "earnedScore 중 다양성 보너스 (그 주에 처음 해본 범주)",
+            "format": "int32",
+            "example": 20
           },
           "currentWeeklyScore": {
             "type": "integer",
             "description": "이번 주 누적 랭킹 점수",
             "format": "int32",
-            "example": 500
+            "example": 230
+          },
+          "scoredMissionCount": {
+            "type": "integer",
+            "description": "이번 주 점수에 반영된 미션 수",
+            "format": "int32",
+            "example": 2
+          },
+          "maxScoredMissions": {
+            "type": "integer",
+            "description": "주간 점수 반영 최대 횟수",
+            "format": "int32",
+            "example": 3
           }
         },
-        "description": "랭킹 스코어 정보"
+        "description": "랭킹 점수 정보"
       },
-      "RewardInfo": {
+      "MissionCompleteResponseRewardInfo": {
         "type": "object",
         "properties": {
           "earnedPoint": {
@@ -1049,22 +1578,34 @@
         },
         "description": "보상 포인트 정보"
       },
-      "StreakInfo": {
+      "MissionCompleteResponseRhythmInfo": {
         "type": "object",
         "properties": {
-          "streakNow": {
+          "weeklyGoal": {
             "type": "integer",
-            "description": "현재 스트릭",
+            "description": "주간 목표 (주 N회)",
             "format": "int32",
-            "example": 6
+            "example": 3
           },
-          "isStreakMaintained": {
+          "thisWeekCount": {
+            "type": "integer",
+            "description": "이번 주 완료 횟수",
+            "format": "int32",
+            "example": 3
+          },
+          "goalJustAchieved": {
             "type": "boolean",
-            "description": "스트릭 유지 여부",
+            "description": "이번 미션으로 이번 주 목표를 막 채웠는지",
             "example": true
+          },
+          "currentWeeks": {
+            "type": "integer",
+            "description": "목표를 연속으로 채운 주 수",
+            "format": "int32",
+            "example": 4
           }
         },
-        "description": "스트릭 정보"
+        "description": "주간 리듬 정보"
       },
       "MissionArriveRequest": {
         "required": [
@@ -1097,21 +1638,51 @@
           },
           "status": {
             "type": "string",
-            "description": "미션 상태",
+            "description": "미션 상태. 체류 확인 중이면 IN_PROGRESS, 인증되면 ARRIVED",
             "example": "ARRIVED"
           },
           "arrivedAt": {
             "type": "string",
-            "description": "도착 인증 일시",
+            "description": "도착 인증 일시 (체류 확인 중이면 null)",
             "format": "date-time"
+          },
+          "remainingDwellSeconds": {
+            "type": "integer",
+            "description": "도착 인정까지 더 머물러야 하는 초. 0이면 인증 완료. 이 시간이 지난 뒤 같은 요청을 다시 보내면 된다",
+            "format": "int32",
+            "example": 0
           },
           "message": {
             "type": "string",
             "description": "응답 메시지",
-            "example": "목적지에 도착했습니다! 주변을 둘러보세요."
+            "example": "목적지에 도착했어요! 주변을 둘러보세요."
           }
         },
-        "description": "미션 도착 인증 응답 DTO"
+        "description": "미션 도착 인증 응답 DTO. 반경 안에서 체류 시간을 채우는 중이면 status는 IN_PROGRESS로 유지된다"
+      },
+      "MissionAbortRequest": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "description": "포기 이유 (FARTHER_THAN_EXPECTED 생각보다 멀었어요, TIRED 피곤해졌어요, SOMETHING_CAME_UP 갑자기 일이 생겼어요, ROUTE_INCONVENIENT 길이 불편했어요)",
+            "example": "TIRED",
+            "enum": [
+              "FARTHER_THAN_EXPECTED",
+              "TIRED",
+              "SOMETHING_CAME_UP",
+              "ROUTE_INCONVENIENT"
+            ]
+          },
+          "movedDistanceMeters": {
+            "minimum": 0,
+            "type": "integer",
+            "description": "포기 시점까지 이동한 거리(미터). 오늘 기록에 저장",
+            "format": "int32",
+            "example": 700
+          }
+        },
+        "description": "미션 포기 요청 DTO (본문 생략 가능)"
       },
       "MissionAbortResponse": {
         "type": "object",
@@ -1132,10 +1703,21 @@
             "description": "중단 일시",
             "format": "date-time"
           },
+          "movedDistanceMeters": {
+            "type": "integer",
+            "description": "저장된 이동 거리(미터). 보내지 않았으면 null",
+            "format": "int32",
+            "example": 700
+          },
+          "nextRecommendationNote": {
+            "type": "string",
+            "description": "다음 추천에 반영되는 내용 (없으면 null)",
+            "example": "오늘은 더 가까운 곳부터 제안할게요."
+          },
           "message": {
             "type": "string",
             "description": "응답 메시지",
-            "example": "산책 미션을 포기했습니다."
+            "example": "멈춰도 기록은 남아요."
           }
         },
         "description": "미션 중단/포기 응답 DTO"
@@ -1157,9 +1739,20 @@
             "description": "사용자 현재 경도",
             "example": 127.02761
           },
+          "mood": {
+            "type": "string",
+            "description": "지금 기분 (TIRED 지침, BORED 심심함, GLOOMY 꿀꿀함, ENERGETIC 활기참). 거리와 범주 우선순위에 반영",
+            "example": "GLOOMY",
+            "enum": [
+              "TIRED",
+              "BORED",
+              "GLOOMY",
+              "ENERGETIC"
+            ]
+          },
           "category": {
             "type": "string",
-            "description": "이번 추천에만 적용할 범주 (선택). 생략하면 선호 설정의 범주 사용",
+            "description": "이번 추천에만 적용할 범주",
             "example": "CAFE",
             "enum": [
               "WALK",
@@ -1171,16 +1764,38 @@
           },
           "moveType": {
             "type": "string",
-            "description": "이번 추천에만 적용할 이동수단 (선택). 생략하면 선호 설정의 이동수단 사용",
+            "description": "이번 추천에만 적용할 이동수단",
             "example": "WALK",
             "enum": [
               "WALK",
               "PUBLIC_TRANSIT",
               "BIKE"
             ]
+          },
+          "budget": {
+            "type": "string",
+            "description": "이번 추천에만 적용할 예산 (FREE 0원, UNDER_10K 1만원, UNDER_30K 3만원, ANY 상관없음)",
+            "example": "FREE",
+            "enum": [
+              "FREE",
+              "UNDER_10K",
+              "UNDER_30K",
+              "ANY"
+            ]
+          },
+          "rejectReason": {
+            "type": "string",
+            "description": "다시 추천받을 때, 이전 추천을 거절한 이유 (TOO_FAR, DISLIKE_ACTIVITY, ALREADY_VISITED, NO_SPENDING). 이번 추천에 바로 반영",
+            "example": "TOO_FAR",
+            "enum": [
+              "TOO_FAR",
+              "DISLIKE_ACTIVITY",
+              "ALREADY_VISITED",
+              "NO_SPENDING"
+            ]
           }
         },
-        "description": "미션 추천 요청 DTO"
+        "description": "미션 추천 요청 DTO. 위치 외에는 모두 선택이며, 생략하면 선호 설정 값을 쓴다"
       },
       "MissionRecommendResponse": {
         "type": "object",
@@ -1196,20 +1811,53 @@
             "description": "미션 상태",
             "example": "READY"
           },
+          "missionTitle": {
+            "type": "string",
+            "description": "미션 제목",
+            "example": "화랑유원지 한 바퀴"
+          },
+          "reason": {
+            "type": "string",
+            "description": "추천 이유 (\"왜 이 미션인가요?\")",
+            "example": "최근 카페 방문이 3회 연속이었어요. 공원 외출 뒤 만족도가 더 높았어요."
+          },
           "place": {
-            "$ref": "#/components/schemas/PlaceInfo"
+            "$ref": "#/components/schemas/MissionRecommendResponsePlaceInfo"
           },
           "distanceMeters": {
             "type": "integer",
             "description": "목적지까지의 직선거리(미터)",
             "format": "int32",
-            "example": 650
+            "example": 780
           },
-          "estDurationMinutes": {
+          "routeDistanceMeters": {
             "type": "integer",
-            "description": "예상 편도 소요 시간(분). 이동수단과 실제 경로 우회를 반영",
+            "description": "실제 길 기준 예상 왕복 이동 거리(미터)",
             "format": "int32",
-            "example": 13
+            "example": 2028
+          },
+          "oneWayMinutes": {
+            "type": "integer",
+            "description": "예상 편도 소요 시간(분)",
+            "format": "int32",
+            "example": 17
+          },
+          "totalMinutes": {
+            "type": "integer",
+            "description": "전체 예상 시간(분) = 왕복 이동 + 장소에서 보내는 시간",
+            "format": "int32",
+            "example": 49
+          },
+          "estCost": {
+            "type": "integer",
+            "description": "예상 비용(원, 범주 평균)",
+            "format": "int32",
+            "example": 0
+          },
+          "isNewPlace": {
+            "type": "boolean",
+            "description": "처음 가보는 장소인지",
+            "example": true
           },
           "estRewardPoint": {
             "type": "integer",
@@ -1238,11 +1886,22 @@
               "PUBLIC_TRANSIT",
               "BIKE"
             ]
+          },
+          "budget": {
+            "type": "string",
+            "description": "추천에 사용된 예산",
+            "example": "ANY",
+            "enum": [
+              "FREE",
+              "UNDER_10K",
+              "UNDER_30K",
+              "ANY"
+            ]
           }
         },
         "description": "미션 추천 응답 DTO"
       },
-      "PlaceInfo": {
+      "MissionRecommendResponsePlaceInfo": {
         "type": "object",
         "properties": {
           "placeId": {
@@ -1259,7 +1918,7 @@
           "name": {
             "type": "string",
             "description": "장소 이름",
-            "example": "역삼동 근린공원"
+            "example": "화랑유원지"
           },
           "category": {
             "type": "string",
@@ -1269,17 +1928,17 @@
           "roadAddress": {
             "type": "string",
             "description": "도로명 주소",
-            "example": "서울특별시 강남구 역삼로 123"
+            "example": "경기 안산시 단원구 동산로 268"
           },
           "latitude": {
             "type": "number",
             "description": "장소 위도",
-            "example": 37.499
+            "example": 37.312
           },
           "longitude": {
             "type": "number",
             "description": "장소 경도",
-            "example": 127.028
+            "example": 126.822
           },
           "placeUrl": {
             "type": "string",
@@ -1291,7 +1950,7 @@
       },
       "SignupRequest": {
         "required": [
-          "birth",
+          "agreements",
           "email",
           "nickname",
           "password",
@@ -1306,27 +1965,57 @@
           },
           "password": {
             "type": "string",
-            "description": "비밀번호",
+            "description": "비밀번호 (영문·숫자 포함 8자 이상)",
             "example": "password123!"
           },
           "nickname": {
             "type": "string",
             "description": "닉네임",
-            "example": "walking_master"
+            "example": "선우"
           },
-          "birth": {
-            "type": "string",
-            "description": "생년월일",
-            "format": "date",
-            "example": "1990-01-01"
+          "birthYear": {
+            "minimum": 1900,
+            "type": "integer",
+            "description": "출생 연도 (선택)",
+            "format": "int32",
+            "example": 2006
           },
           "regionCode": {
             "type": "string",
             "description": "동네 코드 (법정동/행정동)",
-            "example": "1168010100"
+            "example": "4127310500"
+          },
+          "agreements": {
+            "$ref": "#/components/schemas/SignupRequestAgreements"
           }
         },
         "description": "회원가입 요청 DTO"
+      },
+      "SignupRequestAgreements": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "boolean",
+            "description": "서비스 이용약관 (필수)",
+            "example": true
+          },
+          "privacy": {
+            "type": "boolean",
+            "description": "개인정보 처리방침 (필수)",
+            "example": true
+          },
+          "location": {
+            "type": "boolean",
+            "description": "위치기반서비스 이용약관 (필수)",
+            "example": true
+          },
+          "marketing": {
+            "type": "boolean",
+            "description": "혜택·이벤트 알림 수신 (선택)",
+            "example": false
+          }
+        },
+        "description": "약관 동의. service·privacy·location은 필수(true), marketing은 선택"
       },
       "SignupResponse": {
         "type": "object",
@@ -1455,6 +2144,11 @@
             "description": "보상 알림",
             "example": true
           },
+          "quietEnabled": {
+            "type": "boolean",
+            "description": "조용한 시간 사용 여부 (켜면 quietStart~quietEnd 동안 알림을 보내지 않음)",
+            "example": true
+          },
           "quietStart": {
             "type": "string",
             "description": "시각 문자열. 응답은 \"HH:mm:ss\", 요청은 \"HH:mm\"과 \"HH:mm:ss\" 모두 가능 (시는 두 자리)",
@@ -1519,6 +2213,11 @@
             "type": "boolean",
             "description": "보상 알림"
           },
+          "quietEnabled": {
+            "type": "boolean",
+            "description": "조용한 시간 사용 여부",
+            "example": true
+          },
           "quietStart": {
             "type": "string",
             "description": "시각 문자열. 응답은 \"HH:mm:ss\", 요청은 \"HH:mm\"과 \"HH:mm:ss\" 모두 가능 (시는 두 자리)",
@@ -1560,6 +2259,190 @@
         },
         "description": "알림 및 공개 설정 변경 응답 DTO"
       },
+      "UserProfileUpdateRequest": {
+        "type": "object",
+        "properties": {
+          "nickname": {
+            "maxLength": 20,
+            "minLength": 1,
+            "type": "string",
+            "description": "닉네임 (1~20자)",
+            "example": "선우"
+          },
+          "regionCode": {
+            "maxLength": 20,
+            "minLength": 1,
+            "type": "string",
+            "description": "생활권 동네 코드",
+            "example": "4127310500"
+          },
+          "birthYear": {
+            "minimum": 1900,
+            "type": "integer",
+            "description": "출생 연도",
+            "format": "int32",
+            "example": 2007
+          },
+          "rankingNickname": {
+            "maxLength": 20,
+            "minLength": 0,
+            "type": "string",
+            "description": "랭킹에 표시할 닉네임 (1~20자). 빈 문자열을 보내면 설정을 지우고 닉네임을 표시",
+            "example": "선우"
+          }
+        },
+        "description": "프로필 수정 요청 DTO (모든 필드 선택, 보낸 필드만 변경)"
+      },
+      "UserProfileResponse": {
+        "type": "object",
+        "properties": {
+          "userUuid": {
+            "type": "string",
+            "description": "사용자 고유 UUID",
+            "format": "uuid",
+            "example": "123e4567-e89b-12d3-a456-426614174000"
+          },
+          "email": {
+            "type": "string",
+            "description": "이메일",
+            "example": "user@example.com"
+          },
+          "nickname": {
+            "type": "string",
+            "description": "닉네임",
+            "example": "선우"
+          },
+          "rankingNickname": {
+            "type": "string",
+            "description": "랭킹에 표시할 닉네임 (설정하지 않았으면 null이고 닉네임이 표시됨)",
+            "example": "선우"
+          },
+          "birthYear": {
+            "type": "integer",
+            "description": "출생 연도 (입력하지 않았으면 null)",
+            "format": "int32",
+            "example": 2006
+          },
+          "profileImageUrl": {
+            "type": "string",
+            "description": "프로필 이미지 URL",
+            "example": "https://cdn.walkmission.com/profiles/u1.png"
+          },
+          "region": {
+            "$ref": "#/components/schemas/UserProfileResponseRegionInfo"
+          },
+          "asset": {
+            "$ref": "#/components/schemas/UserProfileResponseAssetInfo"
+          },
+          "rhythm": {
+            "$ref": "#/components/schemas/UserProfileResponseRhythmInfo"
+          },
+          "representativeBadge": {
+            "$ref": "#/components/schemas/UserProfileResponseBadgeInfo"
+          },
+          "stats": {
+            "$ref": "#/components/schemas/UserProfileResponseStatsInfo"
+          }
+        },
+        "description": "마이페이지 프로필/자산 조회 응답 DTO"
+      },
+      "UserProfileResponseAssetInfo": {
+        "type": "object",
+        "properties": {
+          "currentPoint": {
+            "type": "integer",
+            "description": "현재 포인트",
+            "format": "int32",
+            "example": 1500
+          }
+        },
+        "description": "자산 정보"
+      },
+      "UserProfileResponseBadgeInfo": {
+        "type": "object",
+        "properties": {
+          "badgeId": {
+            "type": "integer",
+            "description": "배지 ID",
+            "format": "int64",
+            "example": 1
+          },
+          "badgeName": {
+            "type": "string",
+            "description": "배지 이름",
+            "example": "첫 산책 마스터"
+          },
+          "iconUrl": {
+            "type": "string",
+            "description": "배지 아이콘 URL",
+            "example": "https://example.com/badges/1.png"
+          }
+        },
+        "description": "대표 배지 정보"
+      },
+      "UserProfileResponseRegionInfo": {
+        "type": "object",
+        "properties": {
+          "regionCode": {
+            "type": "string",
+            "description": "동네 코드",
+            "example": "1168010100"
+          },
+          "regionName": {
+            "type": "string",
+            "description": "동네 이름",
+            "example": "서울특별시 강남구 역삼동"
+          }
+        },
+        "description": "동네 정보"
+      },
+      "UserProfileResponseRhythmInfo": {
+        "type": "object",
+        "properties": {
+          "weeklyGoal": {
+            "type": "integer",
+            "description": "주간 목표 (주 N회)",
+            "format": "int32",
+            "example": 3
+          },
+          "thisWeekCount": {
+            "type": "integer",
+            "description": "이번 주 완료 횟수",
+            "format": "int32",
+            "example": 2
+          },
+          "goalAchievedThisWeek": {
+            "type": "boolean",
+            "description": "이번 주 목표 달성 여부",
+            "example": false
+          },
+          "currentWeeks": {
+            "type": "integer",
+            "description": "목표를 연속으로 채운 주 수 (지난주를 놓치면 0)",
+            "format": "int32",
+            "example": 3
+          },
+          "bestWeeks": {
+            "type": "integer",
+            "description": "최장 리듬 (주)",
+            "format": "int32",
+            "example": 4
+          }
+        },
+        "description": "주간 리듬 정보"
+      },
+      "UserProfileResponseStatsInfo": {
+        "type": "object",
+        "properties": {
+          "totalCompletedMissions": {
+            "type": "integer",
+            "description": "총 완료 미션 수",
+            "format": "int32",
+            "example": 42
+          }
+        },
+        "description": "통계 정보"
+      },
       "PreferenceUpdateRequest": {
         "type": "object",
         "properties": {
@@ -1567,9 +2450,9 @@
             "maximum": 120,
             "minimum": 10,
             "type": "integer",
-            "description": "희망 산책 시간(분, 왕복 기준, 10~120)",
+            "description": "전체 외출 시간(분, 장소에서 보내는 시간 포함, 10~120)",
             "format": "int32",
-            "example": 30
+            "example": 60
           },
           "moveType": {
             "type": "string",
@@ -1601,6 +2484,25 @@
                 "FOOD"
               ]
             }
+          },
+          "weeklyGoal": {
+            "maximum": 7,
+            "minimum": 1,
+            "type": "integer",
+            "description": "주간 리듬 목표 (주 N회, 1~7)",
+            "format": "int32",
+            "example": 3
+          },
+          "budget": {
+            "type": "string",
+            "description": "부담 없는 예산 (FREE 0원, UNDER_10K 1만원, UNDER_30K 3만원, ANY 상관없음)",
+            "example": "UNDER_10K",
+            "enum": [
+              "FREE",
+              "UNDER_10K",
+              "UNDER_30K",
+              "ANY"
+            ]
           }
         },
         "description": "미션 선호 설정 변경 요청 DTO (모든 필드 선택, 보낸 필드만 변경)"
@@ -1610,9 +2512,9 @@
         "properties": {
           "walkTime": {
             "type": "integer",
-            "description": "희망 산책 시간(분, 왕복 기준)",
+            "description": "전체 외출 시간(분, 장소에서 보내는 시간 포함)",
             "format": "int32",
-            "example": 30
+            "example": 60
           },
           "moveType": {
             "type": "string",
@@ -1643,93 +2545,50 @@
                 "FOOD"
               ]
             }
+          },
+          "weeklyGoal": {
+            "type": "integer",
+            "description": "주간 리듬 목표 (주 N회)",
+            "format": "int32",
+            "example": 3
+          },
+          "budget": {
+            "type": "string",
+            "description": "부담 없는 예산",
+            "example": "UNDER_10K",
+            "enum": [
+              "FREE",
+              "UNDER_10K",
+              "UNDER_30K",
+              "ANY"
+            ]
           }
         },
         "description": "미션 선호 설정 응답 DTO"
       },
-      "AssetInfo": {
+      "PointHistoryResponse": {
         "type": "object",
         "properties": {
           "currentPoint": {
             "type": "integer",
-            "description": "현재 포인트",
+            "description": "현재 보유 포인트",
             "format": "int32",
             "example": 1500
+          },
+          "history": {
+            "type": "array",
+            "description": "포인트 내역 목록",
+            "items": {
+              "$ref": "#/components/schemas/PointHistoryResponsePointHistoryEntry"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/PointHistoryResponsePaginationInfo"
           }
         },
-        "description": "자산 정보"
+        "description": "포인트 거래 내역 페이징 응답 DTO"
       },
-      "RegionInfo": {
-        "type": "object",
-        "properties": {
-          "regionCode": {
-            "type": "string",
-            "description": "동네 코드",
-            "example": "1168010100"
-          },
-          "regionName": {
-            "type": "string",
-            "description": "동네 이름",
-            "example": "서울특별시 강남구 역삼동"
-          }
-        },
-        "description": "동네 정보"
-      },
-      "StatsInfo": {
-        "type": "object",
-        "properties": {
-          "totalCompletedMissions": {
-            "type": "integer",
-            "description": "총 완료 미션 수",
-            "format": "int32",
-            "example": 42
-          }
-        },
-        "description": "통계 정보"
-      },
-      "UserProfileResponse": {
-        "type": "object",
-        "properties": {
-          "userUuid": {
-            "type": "string",
-            "description": "사용자 고유 UUID",
-            "format": "uuid",
-            "example": "123e4567-e89b-12d3-a456-426614174000"
-          },
-          "email": {
-            "type": "string",
-            "description": "이메일",
-            "example": "user@example.com"
-          },
-          "nickname": {
-            "type": "string",
-            "description": "닉네임",
-            "example": "walking_master"
-          },
-          "profileImageUrl": {
-            "type": "string",
-            "description": "프로필 이미지 URL",
-            "example": "https://cdn.walkmission.com/profiles/u1.png"
-          },
-          "region": {
-            "$ref": "#/components/schemas/RegionInfo"
-          },
-          "asset": {
-            "$ref": "#/components/schemas/AssetInfo"
-          },
-          "streak": {
-            "$ref": "#/components/schemas/StreakInfo"
-          },
-          "representativeBadge": {
-            "$ref": "#/components/schemas/BadgeInfo"
-          },
-          "stats": {
-            "$ref": "#/components/schemas/StatsInfo"
-          }
-        },
-        "description": "마이페이지 프로필/자산 조회 응답 DTO"
-      },
-      "PaginationInfo": {
+      "PointHistoryResponsePaginationInfo": {
         "type": "object",
         "properties": {
           "currentPage": {
@@ -1764,7 +2623,7 @@
         },
         "description": "페이징 정보"
       },
-      "PointHistoryEntry": {
+      "PointHistoryResponsePointHistoryEntry": {
         "type": "object",
         "properties": {
           "historyId": {
@@ -1797,29 +2656,23 @@
         },
         "description": "포인트 내역 목록"
       },
-      "PointHistoryResponse": {
+      "BadgeListResponse": {
         "type": "object",
         "properties": {
-          "currentPoint": {
-            "type": "integer",
-            "description": "현재 보유 포인트",
-            "format": "int32",
-            "example": 1500
+          "summary": {
+            "$ref": "#/components/schemas/BadgeListResponseBadgeSummary"
           },
-          "history": {
+          "badges": {
             "type": "array",
-            "description": "포인트 내역 목록",
+            "description": "전체 배지 목록",
             "items": {
-              "$ref": "#/components/schemas/PointHistoryEntry"
+              "$ref": "#/components/schemas/BadgeListResponseBadgeDetail"
             }
-          },
-          "pagination": {
-            "$ref": "#/components/schemas/PaginationInfo"
           }
         },
-        "description": "포인트 거래 내역 페이징 응답 DTO"
+        "description": "전체 배지 도감 및 보유 현황 응답 DTO"
       },
-      "BadgeDetail": {
+      "BadgeListResponseBadgeDetail": {
         "type": "object",
         "properties": {
           "badgeId": {
@@ -1857,27 +2710,23 @@
             "type": "string",
             "description": "획득 일시 (미획득시 null)",
             "format": "date-time"
+          },
+          "progressCurrent": {
+            "type": "integer",
+            "description": "진행도: 현재 값 (목표를 넘으면 목표 값으로 표시)",
+            "format": "int32",
+            "example": 3
+          },
+          "progressTarget": {
+            "type": "integer",
+            "description": "진행도: 목표 값",
+            "format": "int32",
+            "example": 5
           }
         },
         "description": "전체 배지 목록"
       },
-      "BadgeListResponse": {
-        "type": "object",
-        "properties": {
-          "summary": {
-            "$ref": "#/components/schemas/BadgeSummary"
-          },
-          "badges": {
-            "type": "array",
-            "description": "전체 배지 목록",
-            "items": {
-              "$ref": "#/components/schemas/BadgeDetail"
-            }
-          }
-        },
-        "description": "전체 배지 도감 및 보유 현황 응답 DTO"
-      },
-      "BadgeSummary": {
+      "BadgeListResponseBadgeSummary": {
         "type": "object",
         "properties": {
           "totalCount": {
@@ -1895,7 +2744,29 @@
         },
         "description": "배지 현황 요약"
       },
-      "RankingEntry": {
+      "RegionRankingResponse": {
+        "type": "object",
+        "properties": {
+          "region": {
+            "$ref": "#/components/schemas/RegionRankingResponseRegionInfo"
+          },
+          "weekPeriod": {
+            "$ref": "#/components/schemas/RegionRankingResponseWeekPeriodInfo"
+          },
+          "myRanking": {
+            "$ref": "#/components/schemas/RegionRankingResponseRankingEntry"
+          },
+          "leaderboard": {
+            "type": "array",
+            "description": "리더보드 목록",
+            "items": {
+              "$ref": "#/components/schemas/RegionRankingResponseRankingEntry"
+            }
+          }
+        },
+        "description": "동네 주간 랭킹 리더보드 응답 DTO"
+      },
+      "RegionRankingResponseRankingEntry": {
         "type": "object",
         "properties": {
           "isParticipating": {
@@ -1930,33 +2801,39 @@
             "description": "주간 점수",
             "format": "int32",
             "example": 1250
+          },
+          "scoredMissionCount": {
+            "type": "integer",
+            "description": "이번 주 점수에 반영된 미션 수 (주 최대 3회)",
+            "format": "int32",
+            "example": 2
+          },
+          "bonusScore": {
+            "type": "integer",
+            "description": "이번 주 다양성 보너스 합계",
+            "format": "int32",
+            "example": 20
           }
         },
         "description": "리더보드 목록"
       },
-      "RegionRankingResponse": {
+      "RegionRankingResponseRegionInfo": {
         "type": "object",
         "properties": {
-          "region": {
-            "$ref": "#/components/schemas/RegionInfo"
+          "regionCode": {
+            "type": "string",
+            "description": "동네 코드",
+            "example": "1168010100"
           },
-          "weekPeriod": {
-            "$ref": "#/components/schemas/WeekPeriodInfo"
-          },
-          "myRanking": {
-            "$ref": "#/components/schemas/RankingEntry"
-          },
-          "leaderboard": {
-            "type": "array",
-            "description": "리더보드 목록",
-            "items": {
-              "$ref": "#/components/schemas/RankingEntry"
-            }
+          "regionName": {
+            "type": "string",
+            "description": "동네 이름",
+            "example": "서울특별시 강남구 역삼동"
           }
         },
-        "description": "동네 주간 랭킹 리더보드 응답 DTO"
+        "description": "동네 정보"
       },
-      "WeekPeriodInfo": {
+      "RegionRankingResponseWeekPeriodInfo": {
         "type": "object",
         "properties": {
           "startDate": {
@@ -1974,7 +2851,488 @@
         },
         "description": "주간 기간 정보"
       },
-      "ActiveMissionInfo": {
+      "MissionDetailResponse": {
+        "type": "object",
+        "properties": {
+          "missionId": {
+            "type": "integer",
+            "description": "미션 ID",
+            "format": "int64",
+            "example": 1001
+          },
+          "status": {
+            "type": "string",
+            "description": "미션 상태",
+            "example": "COMPLETED"
+          },
+          "missionTitle": {
+            "type": "string",
+            "description": "미션 제목",
+            "example": "화랑유원지 한 바퀴"
+          },
+          "reason": {
+            "type": "string",
+            "description": "추천 이유"
+          },
+          "place": {
+            "$ref": "#/components/schemas/MissionRecommendResponsePlaceInfo"
+          },
+          "placeCategory": {
+            "type": "string",
+            "description": "범주",
+            "example": "WALK",
+            "enum": [
+              "WALK",
+              "CAFE",
+              "SIGHTSEEING",
+              "EXHIBITION",
+              "FOOD"
+            ]
+          },
+          "moveType": {
+            "type": "string",
+            "description": "이동수단",
+            "example": "WALK",
+            "enum": [
+              "WALK",
+              "PUBLIC_TRANSIT",
+              "BIKE"
+            ]
+          },
+          "isNewPlace": {
+            "type": "boolean",
+            "description": "그때 처음 가본 곳이었는지",
+            "example": true
+          },
+          "routeDistanceMeters": {
+            "type": "integer",
+            "description": "예상 왕복 이동 거리(미터)",
+            "format": "int32",
+            "example": 2300
+          },
+          "durationMinutes": {
+            "type": "integer",
+            "description": "소요 시간(분)",
+            "format": "int32",
+            "example": 54
+          },
+          "estCost": {
+            "type": "integer",
+            "description": "예상 비용(원)",
+            "format": "int32",
+            "example": 0
+          },
+          "stepCount": {
+            "type": "integer",
+            "description": "걸음 수",
+            "format": "int32",
+            "example": 3200
+          },
+          "mood": {
+            "$ref": "#/components/schemas/MissionDetailResponseMoodChange"
+          },
+          "timeline": {
+            "type": "array",
+            "description": "미션 타임라인 (시간 순)",
+            "items": {
+              "$ref": "#/components/schemas/MissionDetailResponseTimelineEvent"
+            }
+          },
+          "abort": {
+            "$ref": "#/components/schemas/MissionDetailResponseAbortInfo"
+          }
+        },
+        "description": "미션 기록 상세 응답 DTO (D06)"
+      },
+      "MissionDetailResponseAbortInfo": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "description": "포기 이유",
+            "example": "TIRED",
+            "enum": [
+              "FARTHER_THAN_EXPECTED",
+              "TIRED",
+              "SOMETHING_CAME_UP",
+              "ROUTE_INCONVENIENT"
+            ]
+          },
+          "movedDistanceMeters": {
+            "type": "integer",
+            "description": "그때까지 이동한 거리(미터)",
+            "format": "int32",
+            "example": 700
+          }
+        },
+        "description": "포기한 미션이면 이유와 이동 거리 (아니면 null)"
+      },
+      "MissionDetailResponseMoodChange": {
+        "type": "object",
+        "properties": {
+          "beforeMood": {
+            "type": "string",
+            "description": "추천받을 때 고른 기분",
+            "example": "GLOOMY",
+            "enum": [
+              "TIRED",
+              "BORED",
+              "GLOOMY",
+              "ENERGETIC"
+            ]
+          },
+          "beforeScore": {
+            "type": "integer",
+            "description": "산책 전 점수 (1~5)",
+            "format": "int32",
+            "example": 2
+          },
+          "afterScore": {
+            "type": "integer",
+            "description": "산책 후 점수 (1~5)",
+            "format": "int32",
+            "example": 4
+          },
+          "change": {
+            "type": "integer",
+            "description": "변화량 (후 - 전)",
+            "format": "int32",
+            "example": 2
+          }
+        },
+        "description": "기분 변화"
+      },
+      "MissionDetailResponseTimelineEvent": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "종류 (SCHEDULED 약속, STARTED 출발, ARRIVED 도착, COMPLETED 완료, ABORTED 중단)",
+            "example": "STARTED"
+          },
+          "at": {
+            "type": "string",
+            "description": "일시",
+            "format": "date-time"
+          },
+          "note": {
+            "type": "string",
+            "description": "설명",
+            "example": "약속보다 3분 빠르게 시작"
+          }
+        },
+        "description": "미션 타임라인 (시간 순)"
+      },
+      "ScheduledMissionsResponse": {
+        "type": "object",
+        "properties": {
+          "missions": {
+            "type": "array",
+            "description": "예정 미션 목록",
+            "items": {
+              "$ref": "#/components/schemas/ScheduledMissionInfo"
+            }
+          }
+        },
+        "description": "예정 미션 목록 응답 DTO (가까운 시각 순)"
+      },
+      "MissionMapResponse": {
+        "type": "object",
+        "properties": {
+          "period": {
+            "$ref": "#/components/schemas/PeriodInfo"
+          },
+          "stats": {
+            "$ref": "#/components/schemas/MissionMapResponseStats"
+          },
+          "places": {
+            "type": "array",
+            "description": "다녀온 장소 (최근 방문 순). 지도 핀용",
+            "items": {
+              "$ref": "#/components/schemas/MissionMapResponseVisitedPlace"
+            }
+          },
+          "recent": {
+            "type": "array",
+            "description": "최근 기록 (최대 5건)",
+            "items": {
+              "$ref": "#/components/schemas/MissionRecordItem"
+            }
+          }
+        },
+        "description": "내 지도 응답 DTO (06): 기간 내 다녀온 장소와 통계"
+      },
+      "MissionMapResponseStats": {
+        "type": "object",
+        "properties": {
+          "outingCount": {
+            "type": "integer",
+            "description": "외출 횟수",
+            "format": "int32",
+            "example": 13
+          },
+          "newPlaceCount": {
+            "type": "integer",
+            "description": "새로 가본 장소 수",
+            "format": "int32",
+            "example": 7
+          },
+          "totalRouteDistanceMeters": {
+            "type": "integer",
+            "description": "예상 이동 거리 합계(미터)",
+            "format": "int32",
+            "example": 28400
+          }
+        },
+        "description": "통계"
+      },
+      "MissionMapResponseVisitedPlace": {
+        "type": "object",
+        "properties": {
+          "placeId": {
+            "type": "integer",
+            "description": "장소 ID",
+            "format": "int64",
+            "example": 2001
+          },
+          "name": {
+            "type": "string",
+            "description": "장소 이름",
+            "example": "화랑유원지"
+          },
+          "category": {
+            "type": "string",
+            "description": "장소 세부 분류 (카카오 기준)",
+            "example": "도시근린공원"
+          },
+          "latitude": {
+            "type": "number",
+            "description": "위도",
+            "example": 37.312
+          },
+          "longitude": {
+            "type": "number",
+            "description": "경도",
+            "example": 126.822
+          },
+          "visitCount": {
+            "type": "integer",
+            "description": "기간 내 방문 횟수",
+            "format": "int32",
+            "example": 2
+          },
+          "lastVisitedAt": {
+            "type": "string",
+            "description": "마지막 방문 일시",
+            "format": "date-time"
+          }
+        },
+        "description": "다녀온 장소 (최근 방문 순). 지도 핀용"
+      },
+      "MissionRecordItem": {
+        "type": "object",
+        "properties": {
+          "missionId": {
+            "type": "integer",
+            "description": "미션 ID",
+            "format": "int64",
+            "example": 1001
+          },
+          "missionTitle": {
+            "type": "string",
+            "description": "미션 제목",
+            "example": "화랑유원지 한 바퀴"
+          },
+          "placeName": {
+            "type": "string",
+            "description": "장소 이름",
+            "example": "화랑유원지"
+          },
+          "placeCategory": {
+            "type": "string",
+            "description": "범주",
+            "example": "WALK",
+            "enum": [
+              "WALK",
+              "CAFE",
+              "SIGHTSEEING",
+              "EXHIBITION",
+              "FOOD"
+            ]
+          },
+          "completedAt": {
+            "type": "string",
+            "description": "완료 일시",
+            "format": "date-time"
+          },
+          "durationMinutes": {
+            "type": "integer",
+            "description": "출발부터 완료까지 걸린 시간(분)",
+            "format": "int32",
+            "example": 54
+          },
+          "routeDistanceMeters": {
+            "type": "integer",
+            "description": "예상 왕복 이동 거리(미터, 실제 길 기준 추정)",
+            "format": "int32",
+            "example": 2300
+          },
+          "satisfaction": {
+            "type": "integer",
+            "description": "만족도 (사후 기분 1~5)",
+            "format": "int32",
+            "example": 4
+          },
+          "isNewPlace": {
+            "type": "boolean",
+            "description": "그때 처음 가본 곳이었는지",
+            "example": true
+          },
+          "estCost": {
+            "type": "integer",
+            "description": "예상 비용(원)",
+            "format": "int32",
+            "example": 0
+          }
+        },
+        "description": "완료한 미션 기록 한 건"
+      },
+      "PeriodInfo": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "기간 종류",
+            "example": "MONTH",
+            "enum": [
+              "WEEK",
+              "MONTH",
+              "ALL"
+            ]
+          },
+          "startDate": {
+            "type": "string",
+            "description": "시작일",
+            "format": "date",
+            "example": "2026-08-01"
+          },
+          "endDate": {
+            "type": "string",
+            "description": "종료일(포함)",
+            "format": "date",
+            "example": "2026-08-31"
+          }
+        },
+        "description": "조회 기간 (ALL이면 시작·종료일 null)"
+      },
+      "MissionHistoryResponse": {
+        "type": "object",
+        "properties": {
+          "period": {
+            "$ref": "#/components/schemas/PeriodInfo"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/MissionHistoryResponseSummary"
+          },
+          "records": {
+            "type": "array",
+            "description": "기록 목록 (최신순)",
+            "items": {
+              "$ref": "#/components/schemas/MissionRecordItem"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/MissionHistoryResponsePagination"
+          }
+        },
+        "description": "활동 기록 응답 DTO (M02)"
+      },
+      "MissionHistoryResponsePagination": {
+        "type": "object",
+        "properties": {
+          "currentPage": {
+            "type": "integer",
+            "description": "현재 페이지 번호",
+            "format": "int32",
+            "example": 0
+          },
+          "pageSize": {
+            "type": "integer",
+            "description": "페이지 크기",
+            "format": "int32",
+            "example": 20
+          },
+          "totalPages": {
+            "type": "integer",
+            "description": "전체 페이지 수",
+            "format": "int32",
+            "example": 1
+          },
+          "totalElements": {
+            "type": "integer",
+            "description": "전체 데이터 수",
+            "format": "int64",
+            "example": 13
+          },
+          "hasNext": {
+            "type": "boolean",
+            "description": "다음 페이지 존재 여부",
+            "example": false
+          }
+        },
+        "description": "페이징 정보"
+      },
+      "MissionHistoryResponseSummary": {
+        "type": "object",
+        "properties": {
+          "completedCount": {
+            "type": "integer",
+            "description": "완료 횟수",
+            "format": "int32",
+            "example": 13
+          },
+          "totalOutdoorMinutes": {
+            "type": "integer",
+            "description": "밖에서 보낸 시간 합계(분)",
+            "format": "int32",
+            "example": 702
+          },
+          "averageSatisfaction": {
+            "type": "number",
+            "description": "평균 만족도 (기록 없으면 null)",
+            "format": "double",
+            "example": 4.2
+          },
+          "totalRouteDistanceMeters": {
+            "type": "integer",
+            "description": "예상 이동 거리 합계(미터)",
+            "format": "int32",
+            "example": 28400
+          },
+          "newPlaceCount": {
+            "type": "integer",
+            "description": "새로 가본 장소 수",
+            "format": "int32",
+            "example": 7
+          }
+        },
+        "description": "기간·필터에 해당하는 전체 기록 요약"
+      },
+      "CurrentMissionResponse": {
+        "type": "object",
+        "properties": {
+          "hasActiveMission": {
+            "type": "boolean",
+            "description": "진행 중인 미션 존재 여부",
+            "example": true
+          },
+          "mission": {
+            "$ref": "#/components/schemas/CurrentMissionResponseActiveMissionInfo"
+          }
+        },
+        "description": "진행 중인 미션 조회 응답 DTO. 산책 중인 미션 > 약속하지 않은 추천 > 가장 가까운 예정 미션 순으로 하나를 돌려준다"
+      },
+      "CurrentMissionResponseActiveMissionInfo": {
         "type": "object",
         "properties": {
           "missionId": {
@@ -1988,13 +3346,23 @@
             "description": "미션 상태",
             "example": "IN_PROGRESS"
           },
+          "missionTitle": {
+            "type": "string",
+            "description": "미션 제목",
+            "example": "화랑유원지 한 바퀴"
+          },
+          "scheduledAt": {
+            "type": "string",
+            "description": "출발 약속 시각 (약속하지 않았으면 null)",
+            "format": "date-time"
+          },
           "startedAt": {
             "type": "string",
             "description": "출발 일시 (READY 상태일 땐 null)",
             "format": "date-time"
           },
           "place": {
-            "$ref": "#/components/schemas/PlaceInfo"
+            "$ref": "#/components/schemas/CurrentMissionResponsePlaceInfo"
           },
           "estRewardPoint": {
             "type": "integer",
@@ -2005,19 +3373,52 @@
         },
         "description": "진행 중인 미션 정보 (없을 경우 null)"
       },
-      "CurrentMissionResponse": {
+      "CurrentMissionResponsePlaceInfo": {
         "type": "object",
         "properties": {
-          "hasActiveMission": {
-            "type": "boolean",
-            "description": "진행 중인 미션 존재 여부",
-            "example": true
+          "placeId": {
+            "type": "integer",
+            "description": "장소 ID",
+            "format": "int64",
+            "example": 2001
           },
-          "mission": {
-            "$ref": "#/components/schemas/ActiveMissionInfo"
+          "kakaoPlaceId": {
+            "type": "string",
+            "description": "카카오 장소 ID",
+            "example": "18577297"
+          },
+          "name": {
+            "type": "string",
+            "description": "장소 이름",
+            "example": "역삼동 근린공원"
+          },
+          "category": {
+            "type": "string",
+            "description": "장소 카테고리",
+            "example": "공원"
+          },
+          "roadAddress": {
+            "type": "string",
+            "description": "도로명 주소",
+            "example": "서울특별시 강남구 역삼로 123"
+          },
+          "latitude": {
+            "type": "number",
+            "description": "장소 위도",
+            "example": 37.499
+          },
+          "longitude": {
+            "type": "number",
+            "description": "장소 경도",
+            "example": 127.028
+          },
+          "placeUrl": {
+            "type": "string",
+            "description": "카카오맵 장소 상세 URL",
+            "example": "http://place.map.kakao.com/18577297"
           }
         },
-        "description": "진행 중인 미션 조회 응답 DTO"
+        "description": "목적지 장소 정보"
       },
       "ErrorResponse": {
         "type": "object",
