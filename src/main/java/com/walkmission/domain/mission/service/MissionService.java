@@ -16,6 +16,7 @@ import com.walkmission.domain.user.entity.User;
 import com.walkmission.domain.user.entity.UserMissionPreference;
 import com.walkmission.domain.user.repository.UserMissionPreferenceRepository;
 import com.walkmission.domain.user.repository.UserRepository;
+import com.walkmission.domain.user.service.RhythmService;
 import com.walkmission.global.external.kakao.KakaoPlace;
 import com.walkmission.global.util.GeoUtils;
 import com.walkmission.global.error.BusinessException;
@@ -24,6 +25,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.HashSet;
@@ -33,7 +35,8 @@ import java.util.Set;
 
 @Service
 public class MissionService {
-    private static final double ARRIVAL_RADIUS_METERS = 50;
+    private static final double ARRIVAL_RADIUS_METERS = 80;
+    private static final int ARRIVAL_DWELL_SECONDS = 30;
     private static final int RECENT_PLACE_EXCLUDE_DAYS = 7;
 
     private final MissionRecordRepository missionRecordRepository;
@@ -43,11 +46,12 @@ public class MissionService {
     private final RankingService rankingService;
     private final UserMissionPreferenceRepository preferenceRepository;
     private final PlaceRecommender placeRecommender;
+    private final RhythmService rhythmService;
 
     public MissionService(MissionRecordRepository missionRecordRepository, PlaceRepository placeRepository,
                           UserRepository userRepository, RewardService rewardService,
                           RankingService rankingService, UserMissionPreferenceRepository preferenceRepository,
-                          PlaceRecommender placeRecommender) {
+                          PlaceRecommender placeRecommender, RhythmService rhythmService) {
         this.missionRecordRepository = missionRecordRepository;
         this.placeRepository = placeRepository;
         this.userRepository = userRepository;
@@ -55,6 +59,7 @@ public class MissionService {
         this.rankingService = rankingService;
         this.preferenceRepository = preferenceRepository;
         this.placeRecommender = placeRecommender;
+        this.rhythmService = rhythmService;
     }
 
     @Transactional
@@ -92,7 +97,8 @@ public class MissionService {
         boolean isNewPlace = !missionRecordRepository.existsByUserIdAndPlaceIdAndStatus(
                 userId, place.getId(), MissionStatus.COMPLETED);
 
-        MissionRecord mission = missionRecordRepository.save(new MissionRecord(user, place, isNewPlace));
+        MissionRecord mission = missionRecordRepository.save(
+                new MissionRecord(user, place, candidate.category(), isNewPlace));
 
         return new MissionRecommendResponse(
                 mission.getId(),
@@ -125,7 +131,11 @@ public class MissionService {
                 "산책 미션을 시작했습니다. 안전하게 이동하세요!");
     }
 
-    @Transactional
+    /**
+     * 도착 인증: 반경 안에서 처음 요청한 시각부터 체류 시간을 재고, 채운 뒤 다시 요청하면 도착으로 인정한다.
+     * 반경을 벗어나면 체류 시간을 초기화한다. 체류 시작/초기화는 에러 응답이어도 저장돼야 하므로 롤백하지 않는다.
+     */
+    @Transactional(noRollbackFor = BusinessException.class)
     public MissionArriveResponse arrive(Long userId, Long missionId, MissionArriveRequest request) {
         MissionRecord mission = getMission(userId, missionId);
         requireStatus(mission, MissionStatus.IN_PROGRESS);
@@ -134,14 +144,22 @@ public class MissionService {
         double distance = GeoUtils.distanceMeters(
                 request.latitude(), request.longitude(), place.getLatitude(), place.getLongitude());
         if (distance > ARRIVAL_RADIUS_METERS) {
+            mission.resetArrivalCheck();
             throw new BusinessException(ErrorCode.NOT_ENOUGH_DISTANCE, Map.of("currentDistanceMeters", (int) Math.round(distance)));
         }
 
-        mission.arrive(LocalDateTime.now());
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime checkStartedAt = mission.markInsideArrivalZone(now);
+        long dwelled = Duration.between(checkStartedAt, now).getSeconds();
+        if (dwelled < ARRIVAL_DWELL_SECONDS) {
+            int remaining = (int) (ARRIVAL_DWELL_SECONDS - dwelled);
+            return new MissionArriveResponse(mission.getId(), mission.getStatus().name(), null, remaining,
+                    "목적지 근처예요. " + remaining + "초만 머물러 주세요.");
+        }
 
-        return new MissionArriveResponse(
-                mission.getId(), mission.getStatus().name(), mission.getArrivedAt(),
-                "목적지에 도착했습니다! 주변을 둘러보세요.");
+        mission.arrive(now);
+        return new MissionArriveResponse(mission.getId(), mission.getStatus().name(), mission.getArrivedAt(), 0,
+                "목적지에 도착했어요! 주변을 둘러보세요.");
     }
 
     @Transactional
@@ -151,13 +169,13 @@ public class MissionService {
 
         mission.complete(request.afterSurveyScore(), request.stepCount(), LocalDateTime.now());
 
-        // 정산 순서: 포인트 → 스트릭 → 랭킹 → 배지 (배지 조건이 갱신된 스트릭/완료 횟수를 참조)
+        // 정산 순서: 포인트 → 주간 리듬 → 랭킹 → 배지 (배지 조건이 갱신된 리듬/완료 횟수를 참조)
         User user = mission.getUser();
         int earnedPoint = RewardPolicy.MISSION_COMPLETE_POINT;
         int currentTotalPoint = rewardService.earnPoint(
                 user, earnedPoint, "미션 완료 보상 - " + mission.getPlaceNameSnapshot());
-        RewardService.StreakResult streak = rewardService.recordStreak(user.getId());
-        RankingService.ScoreResult score = rankingService.addMissionScore(user);
+        RhythmService.RhythmResult rhythm = rhythmService.evaluate(user.getId());
+        RankingService.ScoreResult score = rankingService.addMissionScore(user, mission);
         List<Badge> newBadges = rewardService.awardBadges(user);
 
         return new MissionCompleteResponse(
@@ -166,8 +184,10 @@ public class MissionService {
                 mission.getCompletedAt(),
                 mission.getStepCount(),
                 new MissionCompleteResponse.RewardInfo(earnedPoint, currentTotalPoint),
-                new MissionCompleteResponse.RankingInfo(score.isParticipant(), score.earnedScore(), score.weeklyScore()),
-                new MissionCompleteResponse.StreakInfo(streak.streakNow(), streak.isMaintained()),
+                new MissionCompleteResponse.RankingInfo(score.isParticipant(), score.earnedScore(), score.bonusScore(),
+                        score.weeklyScore(), score.scoredMissionCount(), score.maxScoredMissions()),
+                new MissionCompleteResponse.RhythmInfo(rhythm.weeklyGoal(), rhythm.thisWeekCount(),
+                        rhythm.goalJustAchieved(), rhythm.currentWeeks()),
                 newBadges.stream()
                         .map(b -> new MissionCompleteResponse.BadgeInfo(
                                 b.getId(), b.getBadgeName(), b.getDescription(), b.getIconUrl()))

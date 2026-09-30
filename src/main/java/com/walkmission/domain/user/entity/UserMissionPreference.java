@@ -12,6 +12,7 @@ import java.util.Set;
 @Entity
 public class UserMissionPreference extends BaseTimeEntity {
     public static final int DEFAULT_WALK_TIME = 30;
+    public static final int DEFAULT_WEEKLY_GOAL = 3;
 
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -22,6 +23,8 @@ public class UserMissionPreference extends BaseTimeEntity {
 
     private Integer walkTime;
     private Integer spendLimit;
+    /** 주간 리듬 목표(주 N회) */
+    private Integer weeklyGoal;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "how_move")
@@ -38,10 +41,12 @@ public class UserMissionPreference extends BaseTimeEntity {
         this.user = user;
         this.walkTime = DEFAULT_WALK_TIME;
         this.moveType = MoveType.WALK;
+        this.weeklyGoal = DEFAULT_WEEKLY_GOAL;
     }
 
-    public void update(Integer walkTime, MoveType moveType, Set<PlaceCategory> categories) {
+    public void update(Integer walkTime, MoveType moveType, Set<PlaceCategory> categories, Integer weeklyGoal) {
         if (walkTime != null) this.walkTime = walkTime;
+        if (weeklyGoal != null) this.weeklyGoal = weeklyGoal;
         if (moveType != null) this.moveType = moveType;
         if (categories != null) {
             this.categories = categories.isEmpty() ? EnumSet.noneOf(PlaceCategory.class) : EnumSet.copyOf(categories);
@@ -53,6 +58,7 @@ public class UserMissionPreference extends BaseTimeEntity {
     public int getWalkTime() { return walkTime != null ? walkTime : DEFAULT_WALK_TIME; }
     public Integer getSpendLimit() { return spendLimit; }
     public MoveType getMoveType() { return moveType != null ? moveType : MoveType.WALK; }
+    public int getWeeklyGoal() { return weeklyGoal != null ? weeklyGoal : DEFAULT_WEEKLY_GOAL; }
 
     /** 선택한 범주가 없으면 전체 범주를 반환한다. */
     public Set<PlaceCategory> getEffectiveCategories() {

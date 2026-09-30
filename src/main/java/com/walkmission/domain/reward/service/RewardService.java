@@ -13,7 +13,6 @@ import com.walkmission.domain.reward.repository.UserBadgeRepository;
 import com.walkmission.domain.user.entity.User;
 import com.walkmission.domain.user.entity.UserProfile;
 import com.walkmission.domain.user.repository.UserProfileRepository;
-import com.walkmission.global.util.TimeUtils;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import com.walkmission.global.error.BusinessException;
@@ -50,8 +49,6 @@ public class RewardService {
         this.objectMapper = objectMapper;
     }
 
-    public record StreakResult(int streakNow, boolean isMaintained) {}
-
     /** 포인트를 적립하고 적립 후 보유 포인트를 반환한다. */
     @Transactional
     public int earnPoint(User user, int amount, String description) {
@@ -59,13 +56,6 @@ public class RewardService {
         profile.addPoint(amount);
         pointHistoryRepository.save(new PointHistory(user, amount, PointType.EARN, description));
         return profile.getCurrentPoint();
-    }
-
-    @Transactional
-    public StreakResult recordStreak(Long userId) {
-        UserProfile profile = getProfile(userId);
-        boolean maintained = profile.recordActivity(TimeUtils.today());
-        return new StreakResult(profile.getStreakNow(), maintained);
     }
 
     /** 조건을 새로 만족한 배지를 지급하고 반환한다. 대표 배지가 없으면 첫 배지를 대표로 지정한다. */
@@ -79,17 +69,17 @@ public class RewardService {
 
         long missionCount = missionRecordRepository.countByUserIdAndStatus(userId, MissionStatus.COMPLETED);
         long placeCount = missionRecordRepository.countDistinctPlaces(userId, MissionStatus.COMPLETED);
-        int streak = profile.getStreakAsOf(TimeUtils.today());
+        int bestRhythmWeeks = profile.getBestRhythmWeeks();
 
         List<Badge> newBadges = new ArrayList<>();
-        for (Badge badge : badgeRepository.findAllByOrderByIdAsc()) {
+        for (Badge badge : badgeRepository.findByCodeIsNotNullOrderByIdAsc()) {
             if (ownedBadgeIds.contains(badge.getId())) continue;
 
             BadgeCondition condition = parseCondition(badge);
             long progress = switch (condition.type()) {
                 case MISSION_COUNT -> missionCount;
-                case STREAK -> streak;
                 case PLACE_COUNT -> placeCount;
+                case RHYTHM_WEEKS -> bestRhythmWeeks;
             };
             if (progress >= condition.threshold()) {
                 userBadgeRepository.save(new UserBadge(user, badge));
@@ -127,7 +117,7 @@ public class RewardService {
         Map<Long, UserBadge> owned = userBadgeRepository.findByUserId(userId).stream()
                 .collect(Collectors.toMap(ub -> ub.getBadge().getId(), Function.identity(), (a, b) -> a));
 
-        List<BadgeListResponse.BadgeDetail> details = badgeRepository.findAllByOrderByIdAsc().stream()
+        List<BadgeListResponse.BadgeDetail> details = badgeRepository.findByCodeIsNotNullOrderByIdAsc().stream()
                 .map(badge -> {
                     UserBadge userBadge = owned.get(badge.getId());
                     return new BadgeListResponse.BadgeDetail(
@@ -139,7 +129,8 @@ public class RewardService {
                 .toList();
 
         return new BadgeListResponse(
-                new BadgeListResponse.BadgeSummary(details.size(), owned.size()),
+                new BadgeListResponse.BadgeSummary(details.size(),
+                        (int) details.stream().filter(BadgeListResponse.BadgeDetail::isAcquired).count()),
                 details
         );
     }

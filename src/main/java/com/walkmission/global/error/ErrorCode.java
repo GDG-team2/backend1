@@ -28,7 +28,7 @@ public enum ErrorCode {
     PLACE_SEARCH_FAILED(HttpStatus.SERVICE_UNAVAILABLE, "장소 검색에 실패했습니다. 잠시 후 다시 시도해 주세요."),
     ACTIVE_MISSION_EXISTS(HttpStatus.CONFLICT, "이미 진행 중인 미션이 있습니다."),
     INVALID_MISSION_STATUS(HttpStatus.CONFLICT, "현재 미션 상태에서는 요청을 처리할 수 없습니다."),
-    NOT_ENOUGH_DISTANCE(HttpStatus.BAD_REQUEST, "목적지 반경 50m 이내에 도착하지 않았습니다.");
+    NOT_ENOUGH_DISTANCE(HttpStatus.BAD_REQUEST, "목적지 반경 80m 이내에 도착하지 않았습니다.");
 
     private final HttpStatus status;
     private final String message;

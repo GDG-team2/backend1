@@ -17,7 +17,6 @@ import com.walkmission.domain.user.repository.UserProfileRepository;
 import com.walkmission.domain.user.repository.UserRepository;
 import com.walkmission.domain.user.repository.UserSettingRepository;
 import com.walkmission.global.util.RegionUtils;
-import com.walkmission.global.util.TimeUtils;
 import com.walkmission.global.error.BusinessException;
 import com.walkmission.global.error.ErrorCode;
 import org.springframework.stereotype.Service;
@@ -31,16 +30,19 @@ public class UserService {
     private final MissionRecordRepository missionRecordRepository;
     private final BadgeRepository badgeRepository;
     private final UserMissionPreferenceRepository preferenceRepository;
+    private final RhythmService rhythmService;
 
     public UserService(UserRepository userRepository, UserProfileRepository userProfileRepository, UserSettingRepository userSettingRepository,
                        MissionRecordRepository missionRecordRepository, BadgeRepository badgeRepository,
-                       UserMissionPreferenceRepository preferenceRepository) {
+                       UserMissionPreferenceRepository preferenceRepository,
+                       RhythmService rhythmService) {
         this.userRepository = userRepository;
         this.userProfileRepository = userProfileRepository;
         this.userSettingRepository = userSettingRepository;
         this.missionRecordRepository = missionRecordRepository;
         this.badgeRepository = badgeRepository;
         this.preferenceRepository = preferenceRepository;
+        this.rhythmService = rhythmService;
     }
 
     public UserProfileResponse getProfile(Long userId) {
@@ -49,6 +51,7 @@ public class UserService {
         UserProfile profile = userProfileRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
         long completedMissions = missionRecordRepository.countByUserIdAndStatus(userId, MissionStatus.COMPLETED);
+        RhythmService.RhythmResult rhythm = rhythmService.get(userId);
         UserProfileResponse.BadgeInfo representativeBadge = profile.getRepresentativeBadgeId() == null ? null
                 : badgeRepository.findById(profile.getRepresentativeBadgeId())
                         .map(b -> new UserProfileResponse.BadgeInfo(b.getId(), b.getBadgeName(), b.getIconUrl()))
@@ -61,7 +64,8 @@ public class UserService {
             user.getProfileImageUrl(),
             new UserProfileResponse.RegionInfo(user.getRegionCode(), RegionUtils.nameOf(user.getRegionCode())),
             new UserProfileResponse.AssetInfo(profile.getCurrentPoint()),
-            new UserProfileResponse.StreakInfo(profile.getStreakAsOf(TimeUtils.today()), profile.getStreakRecord()),
+            new UserProfileResponse.RhythmInfo(rhythm.weeklyGoal(), rhythm.thisWeekCount(), rhythm.goalAchievedThisWeek(),
+                    rhythm.currentWeeks(), rhythm.bestWeeks()),
             representativeBadge,
             new UserProfileResponse.StatsInfo((int) completedMissions)
         );
@@ -94,7 +98,8 @@ public class UserService {
     @Transactional
     public PreferenceResponse updatePreference(Long userId, PreferenceUpdateRequest request) {
         UserMissionPreference preference = getPreferenceEntity(userId);
-        preference.update(request.walkTime(), request.moveType(), request.categories());
+        preference.update(request.walkTime(), request.moveType(), request.categories(), request.weeklyGoal());
+        if (request.weeklyGoal() != null) rhythmService.evaluate(userId); // 목표를 낮춰 이미 채웠다면 바로 반영
         return toPreferenceResponse(preference);
     }
 
@@ -107,6 +112,7 @@ public class UserService {
         return new PreferenceResponse(
                 preference.getWalkTime(),
                 preference.getMoveType(),
-                preference.getEffectiveCategories().stream().sorted().toList());
+                preference.getEffectiveCategories().stream().sorted().toList(),
+                preference.getWeeklyGoal());
     }
 }

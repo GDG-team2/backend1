@@ -28,6 +28,8 @@ public record RegionRankingResponse(
             @Schema(description = "닉네임", example = "walking_master") String nickname,
             @Schema(description = "프로필 이미지 URL", example = "https://example.com/profile.png") String profileImageUrl,
             @Schema(description = "순위", example = "1") Integer rank,
-            @Schema(description = "주간 점수", example = "1250") Integer score
+            @Schema(description = "주간 점수", example = "1250") Integer score,
+            @Schema(description = "이번 주 점수에 반영된 미션 수 (주 최대 3회)", example = "2") Integer scoredMissionCount,
+            @Schema(description = "이번 주 다양성 보너스 합계", example = "20") Integer bonusScore
     ) {}
 }

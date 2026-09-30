@@ -16,5 +16,8 @@ public record PreferenceUpdateRequest(
         MoveType moveType,
 
         @Schema(description = "선호 범주 (WALK 산책, CAFE 카페, SIGHTSEEING 구경, EXHIBITION 전시, FOOD 먹기). 빈 배열이면 전체 범주", example = "[\"WALK\", \"CAFE\"]")
-        Set<PlaceCategory> categories
+        Set<PlaceCategory> categories,
+
+        @Schema(description = "주간 리듬 목표 (주 N회, 1~7)", example = "3")
+        @Min(1) @Max(7) Integer weeklyGoal
 ) {}

@@ -23,8 +23,8 @@ public record UserProfileResponse(
         @Schema(description = "자산 정보")
         AssetInfo asset,
         
-        @Schema(description = "스트릭 정보")
-        StreakInfo streak,
+        @Schema(description = "주간 리듬 정보")
+        RhythmInfo rhythm,
         
         @Schema(description = "대표 배지 정보")
         BadgeInfo representativeBadge,
@@ -41,9 +41,12 @@ public record UserProfileResponse(
             @Schema(description = "현재 포인트", example = "1500") Integer currentPoint
     ) {}
 
-    public record StreakInfo(
-            @Schema(description = "현재 연속 스트릭", example = "5") Integer streakNow,
-            @Schema(description = "최고 연속 스트릭 기록", example = "14") Integer streakRecord
+    public record RhythmInfo(
+            @Schema(description = "주간 목표 (주 N회)", example = "3") Integer weeklyGoal,
+            @Schema(description = "이번 주 완료 횟수", example = "2") Integer thisWeekCount,
+            @Schema(description = "이번 주 목표 달성 여부", example = "false") Boolean goalAchievedThisWeek,
+            @Schema(description = "목표를 연속으로 채운 주 수 (지난주를 놓치면 0)", example = "3") Integer currentWeeks,
+            @Schema(description = "최장 리듬 (주)", example = "4") Integer bestWeeks
     ) {}
 
     public record BadgeInfo(

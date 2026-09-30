@@ -11,8 +11,8 @@ public record MissionCompleteResponse(
         @Schema(description = "완료 일시") LocalDateTime completedAt,
         @Schema(description = "기록된 걸음 수", example = "1850") Integer stepCount,
         @Schema(description = "보상 포인트 정보") RewardInfo reward,
-        @Schema(description = "랭킹 스코어 정보") RankingInfo ranking,
-        @Schema(description = "스트릭 정보") StreakInfo streak,
+        @Schema(description = "랭킹 점수 정보") RankingInfo ranking,
+        @Schema(description = "주간 리듬 정보") RhythmInfo rhythm,
         @Schema(description = "새로 획득한 배지 목록") List<BadgeInfo> newBadges
 ) {
     public record RewardInfo(
@@ -21,20 +21,25 @@ public record MissionCompleteResponse(
     ) {}
 
     public record RankingInfo(
-            @Schema(description = "랭킹 참여 여부", example = "true") Boolean isParticipant,
-            @Schema(description = "이번 미션으로 획득한 랭킹 점수", example = "100") Integer earnedScore,
-            @Schema(description = "이번 주 누적 랭킹 점수", example = "500") Integer currentWeeklyScore
+            @Schema(description = "랭킹 참여 여부 (랭킹 공개 설정)", example = "true") Boolean isParticipant,
+            @Schema(description = "이번 미션으로 얻은 점수 (보너스 포함). 이번 주 반영 한도를 넘었으면 0", example = "120") Integer earnedScore,
+            @Schema(description = "earnedScore 중 다양성 보너스 (그 주에 처음 해본 범주)", example = "20") Integer bonusScore,
+            @Schema(description = "이번 주 누적 랭킹 점수", example = "230") Integer currentWeeklyScore,
+            @Schema(description = "이번 주 점수에 반영된 미션 수", example = "2") Integer scoredMissionCount,
+            @Schema(description = "주간 점수 반영 최대 횟수", example = "3") Integer maxScoredMissions
     ) {}
 
-    public record StreakInfo(
-            @Schema(description = "현재 스트릭", example = "6") Integer streakNow,
-            @Schema(description = "스트릭 유지 여부", example = "true") Boolean isStreakMaintained
+    public record RhythmInfo(
+            @Schema(description = "주간 목표 (주 N회)", example = "3") Integer weeklyGoal,
+            @Schema(description = "이번 주 완료 횟수", example = "3") Integer thisWeekCount,
+            @Schema(description = "이번 미션으로 이번 주 목표를 막 채웠는지", example = "true") Boolean goalJustAchieved,
+            @Schema(description = "목표를 연속으로 채운 주 수", example = "4") Integer currentWeeks
     ) {}
 
     public record BadgeInfo(
             @Schema(description = "획득한 배지 ID", example = "2") Long badgeId,
-            @Schema(description = "배지 이름", example = "공원 탐험가") String badgeName,
-            @Schema(description = "배지 설명", example = "공원 카테고리의 장소를 3번 방문했습니다.") String description,
+            @Schema(description = "배지 이름", example = "새 길 발견") String badgeName,
+            @Schema(description = "배지 설명", example = "서로 다른 장소 5곳을 방문했어요.") String description,
             @Schema(description = "배지 아이콘 URL", example = "https://example.com/badges/2.png") String iconUrl
     ) {}
 }

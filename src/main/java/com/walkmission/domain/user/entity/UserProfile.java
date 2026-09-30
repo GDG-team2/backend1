@@ -13,9 +13,12 @@ public class UserProfile extends BaseTimeEntity {
     @JoinColumn(name = "user_id", unique = true, nullable = false)
     private User user;
 
-    private Integer streakNow;
-    private Integer streakRecord;
-    private LocalDate lastActiveDate;
+    /** 주간 목표를 연속으로 달성한 주 수 */
+    private Integer rhythmWeeks;
+    private Integer bestRhythmWeeks;
+    /** 마지막으로 주간 목표를 달성한 주의 월요일 */
+    private LocalDate lastRhythmWeekStart;
+
     private Integer currentPoint;
     private Long representativeBadgeId;
 
@@ -23,37 +26,42 @@ public class UserProfile extends BaseTimeEntity {
 
     public UserProfile(User user) {
         this.user = user;
-        this.streakNow = 0;
-        this.streakRecord = 0;
+        this.rhythmWeeks = 0;
+        this.bestRhythmWeeks = 0;
         this.currentPoint = 0;
     }
 
     public Long getId() { return id; }
     public User getUser() { return user; }
-    public Integer getStreakNow() { return streakNow; }
-    public Integer getStreakRecord() { return streakRecord; }
-    public LocalDate getLastActiveDate() { return lastActiveDate; }
     public Integer getCurrentPoint() { return currentPoint; }
     public Long getRepresentativeBadgeId() { return representativeBadgeId; }
+    public int getBestRhythmWeeks() { return bestRhythmWeeks != null ? bestRhythmWeeks : 0; }
+    public LocalDate getLastRhythmWeekStart() { return lastRhythmWeekStart; }
 
     /**
-     * 오늘 미션을 완료했음을 기록하고 스트릭이 이어졌는지 반환한다.
-     * 어제(또는 오늘 이미) 활동했으면 유지, 그 외에는 1일부터 다시 시작한다.
+     * 이번 주 목표 달성을 기록한다. 이미 이번 주에 달성했으면 아무것도 하지 않고 false를 반환한다.
+     * 지난주에도 달성했으면 연속 주 수를 이어가고, 아니면 1주부터 다시 시작한다.
      */
-    public boolean recordActivity(LocalDate today) {
-        boolean maintained = lastActiveDate != null && !lastActiveDate.isBefore(today.minusDays(1));
-        if (lastActiveDate == null || !lastActiveDate.equals(today)) {
-            this.streakNow = maintained ? streakNow + 1 : 1;
-            this.lastActiveDate = today;
-        }
-        this.streakRecord = Math.max(streakRecord, streakNow);
-        return maintained;
+    public boolean achieveWeeklyGoal(LocalDate weekStart) {
+        if (weekStart.equals(lastRhythmWeekStart)) return false;
+        boolean continued = weekStart.minusWeeks(1).equals(lastRhythmWeekStart);
+        this.rhythmWeeks = continued ? getRhythmWeeksRaw() + 1 : 1;
+        this.lastRhythmWeekStart = weekStart;
+        this.bestRhythmWeeks = Math.max(getBestRhythmWeeks(), rhythmWeeks);
+        return true;
     }
 
-    /** 어제 이후로 활동이 없으면 스트릭은 이미 끊긴 것으로 본다. */
-    public int getStreakAsOf(LocalDate today) {
-        if (lastActiveDate == null || lastActiveDate.isBefore(today.minusDays(1))) return 0;
-        return streakNow;
+    /**
+     * 현재 이어지고 있는 리듬(주). 이번 주나 지난주에 달성했으면 유지 중으로 보고,
+     * 지난주를 놓쳤으면 이미 끊긴 것으로 본다. 이번 주는 아직 진행 중이라 끊긴 것으로 보지 않는다.
+     */
+    public int getRhythmWeeksAsOf(LocalDate currentWeekStart) {
+        if (lastRhythmWeekStart == null || lastRhythmWeekStart.isBefore(currentWeekStart.minusWeeks(1))) return 0;
+        return getRhythmWeeksRaw();
+    }
+
+    private int getRhythmWeeksRaw() {
+        return rhythmWeeks != null ? rhythmWeeks : 0;
     }
 
     public void addPoint(int amount) {

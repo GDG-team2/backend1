@@ -24,6 +24,10 @@ public class MissionRecord extends BaseTimeEntity {
     @Enumerated(EnumType.STRING)
     private MissionStatus status;
 
+    /** 추천에 사용된 범주 (랭킹 다양성 보너스 판단용) */
+    @Enumerated(EnumType.STRING)
+    private PlaceCategory placeCategory;
+
     private Boolean isNewPlace;
     private Integer stepCount;
     private Integer beforeSurvey;
@@ -33,15 +37,30 @@ public class MissionRecord extends BaseTimeEntity {
     private LocalDateTime arrivedAt;
     private LocalDateTime completedAt;
     private LocalDateTime abortedAt;
+    /** 도착 반경에 처음 들어온 시각. 체류 시간을 채우면 도착으로 인정한다. */
+    private LocalDateTime arrivalCheckStartedAt;
 
     protected MissionRecord() {}
 
-    public MissionRecord(User user, Place place, boolean isNewPlace) {
+    public MissionRecord(User user, Place place, PlaceCategory placeCategory, boolean isNewPlace) {
         this.user = user;
         this.place = place;
         this.placeNameSnapshot = place.getName();
+        this.placeCategory = placeCategory;
         this.status = MissionStatus.READY;
         this.isNewPlace = isNewPlace;
+    }
+
+    /** 도착 반경 안에 있음을 기록하고, 체류가 시작된 시각을 반환한다. */
+    public LocalDateTime markInsideArrivalZone(LocalDateTime now) {
+        requireStatus(MissionStatus.IN_PROGRESS);
+        if (arrivalCheckStartedAt == null) this.arrivalCheckStartedAt = now;
+        return arrivalCheckStartedAt;
+    }
+
+    /** 반경을 벗어나면 체류 시간을 처음부터 다시 잰다. */
+    public void resetArrivalCheck() {
+        this.arrivalCheckStartedAt = null;
     }
 
     public void start(Integer beforeSurvey, LocalDateTime now) {
@@ -84,6 +103,7 @@ public class MissionRecord extends BaseTimeEntity {
     public Place getPlace() { return place; }
     public String getPlaceNameSnapshot() { return placeNameSnapshot; }
     public MissionStatus getStatus() { return status; }
+    public PlaceCategory getPlaceCategory() { return placeCategory; }
     public Boolean getIsNewPlace() { return isNewPlace; }
     public Integer getStepCount() { return stepCount; }
     public Integer getBeforeSurvey() { return beforeSurvey; }

@@ -1,5 +1,8 @@
 package com.walkmission.domain.ranking.service;
 
+import com.walkmission.domain.mission.entity.MissionRecord;
+import com.walkmission.domain.mission.entity.MissionStatus;
+import com.walkmission.domain.mission.repository.MissionRecordRepository;
 import com.walkmission.domain.ranking.dto.RegionRankingResponse;
 import com.walkmission.domain.ranking.entity.Ranking;
 import com.walkmission.domain.ranking.entity.RankingHistory;
@@ -36,29 +39,52 @@ public class RankingService {
     private final RankingHistoryRepository rankingHistoryRepository;
     private final UserRepository userRepository;
     private final UserSettingRepository userSettingRepository;
+    private final MissionRecordRepository missionRecordRepository;
 
     public RankingService(RankingRepository rankingRepository, RankingHistoryRepository rankingHistoryRepository,
-                          UserRepository userRepository, UserSettingRepository userSettingRepository) {
+                          UserRepository userRepository, UserSettingRepository userSettingRepository,
+                          MissionRecordRepository missionRecordRepository) {
         this.rankingRepository = rankingRepository;
         this.rankingHistoryRepository = rankingHistoryRepository;
         this.userRepository = userRepository;
         this.userSettingRepository = userSettingRepository;
+        this.missionRecordRepository = missionRecordRepository;
     }
 
-    public record ScoreResult(boolean isParticipant, int earnedScore, int weeklyScore) {}
+    /**
+     * @param earnedScore  이번 미션으로 얻은 점수 (보너스 포함, 주간 한도를 넘었으면 0)
+     * @param bonusScore   earnedScore 중 다양성 보너스
+     */
+    public record ScoreResult(boolean isParticipant, int earnedScore, int bonusScore, int weeklyScore,
+                              int scoredMissionCount, int maxScoredMissions) {}
 
-    /** 미션 완료 점수를 이번 주 랭킹에 더한다. 랭킹 비공개여도 점수는 쌓고 리더보드에서만 숨긴다. */
+    /**
+     * 미션 완료 점수를 이번 주 랭킹에 더한다. 주 N회까지만 반영하고, 그 주에 처음 해본 범주면 보너스를 준다.
+     * 랭킹 비공개여도 점수는 쌓고 리더보드에서만 숨긴다.
+     */
     @Transactional
-    public ScoreResult addMissionScore(User user) {
-        LocalDate weekStart = TimeUtils.weekStart(TimeUtils.today());
+    public ScoreResult addMissionScore(User user, MissionRecord mission) {
+        LocalDate weekStart = TimeUtils.currentWeekStart();
         closeFinishedWeeks(weekStart);
 
         Ranking ranking = rankingRepository.findByUserId(user.getId())
                 .orElseGet(() -> rankingRepository.save(new Ranking(user, weekStart)));
-        int earned = RewardPolicy.MISSION_COMPLETE_RANKING_SCORE;
-        ranking.addScore(earned);
+        boolean participant = isRankingPublic(user.getId());
+        int max = RewardPolicy.MAX_SCORED_MISSIONS_PER_WEEK;
 
-        return new ScoreResult(isRankingPublic(user.getId()), earned, ranking.getUserScore());
+        if (ranking.getScoredMissionCount() >= max) {
+            return new ScoreResult(participant, 0, 0, ranking.getUserScore(), ranking.getScoredMissionCount(), max);
+        }
+
+        boolean newCategoryThisWeek = mission.getPlaceCategory() != null
+                && !missionRecordRepository.existsByUserIdAndStatusAndPlaceCategoryAndCompletedAtGreaterThanEqualAndIdNot(
+                        user.getId(), MissionStatus.COMPLETED, mission.getPlaceCategory(),
+                        weekStart.atStartOfDay(), mission.getId());
+        int bonus = newCategoryThisWeek ? RewardPolicy.NEW_CATEGORY_BONUS_SCORE : 0;
+        ranking.addMissionScore(RewardPolicy.MISSION_COMPLETE_RANKING_SCORE, bonus);
+
+        return new ScoreResult(participant, RewardPolicy.MISSION_COMPLETE_RANKING_SCORE + bonus, bonus,
+                ranking.getUserScore(), ranking.getScoredMissionCount(), max);
     }
 
     /** 매주 월요일 0시(KST)에 지난주 랭킹을 기록으로 옮기고 점수를 초기화한다. */
@@ -88,13 +114,14 @@ public class RankingService {
             }
             User u = r.getUser();
             leaderboard.add(new RegionRankingResponse.RankingEntry(
-                    null, u.getUserUuid(), u.getNickname(), u.getProfileImageUrl(), rank, r.getUserScore()));
+                    null, u.getUserUuid(), u.getNickname(), u.getProfileImageUrl(), rank, r.getUserScore(),
+                    r.getScoredMissionCount(), r.getBonusScore()));
         }
 
-        int myScore = rankingRepository.findByUserId(userId)
+        Ranking mine = rankingRepository.findByUserId(userId)
                 .filter(r -> weekStart.equals(r.getWeekStartDate()))
-                .map(Ranking::getUserScore)
-                .orElse(0);
+                .orElse(null);
+        int myScore = mine != null ? mine.getUserScore() : 0;
         boolean participating = isRankingPublic(userId);
         Integer myRank = participating && myScore > 0
                 ? (int) rankingRepository.countHigherScores(regionCode, weekStart, myScore) + 1
@@ -104,7 +131,8 @@ public class RankingService {
                 new RegionRankingResponse.RegionInfo(regionCode, RegionUtils.nameOf(regionCode)),
                 new RegionRankingResponse.WeekPeriodInfo(weekStart, weekStart.plusDays(6)),
                 new RegionRankingResponse.RankingEntry(
-                        participating, user.getUserUuid(), user.getNickname(), user.getProfileImageUrl(), myRank, myScore),
+                        participating, user.getUserUuid(), user.getNickname(), user.getProfileImageUrl(), myRank, myScore,
+                        mine != null ? mine.getScoredMissionCount() : 0, mine != null ? mine.getBonusScore() : 0),
                 leaderboard
         );
     }
