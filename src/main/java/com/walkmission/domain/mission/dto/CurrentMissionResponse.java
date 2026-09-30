@@ -4,7 +4,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-@Schema(description = "진행 중인 미션 조회 응답 DTO")
+@Schema(description = "진행 중인 미션 조회 응답 DTO. 산책 중인 미션 > 약속하지 않은 추천 > 가장 가까운 예정 미션 순으로 하나를 돌려준다")
 public record CurrentMissionResponse(
         @Schema(description = "진행 중인 미션 존재 여부", example = "true") Boolean hasActiveMission,
         @Schema(description = "진행 중인 미션 정보 (없을 경우 null)") ActiveMissionInfo mission
@@ -13,6 +13,7 @@ public record CurrentMissionResponse(
             @Schema(description = "미션 ID", example = "1001") Long missionId,
             @Schema(description = "미션 상태", example = "IN_PROGRESS") String status,
             @Schema(description = "미션 제목", example = "화랑유원지 한 바퀴") String missionTitle,
+            @Schema(description = "출발 약속 시각 (약속하지 않았으면 null)") LocalDateTime scheduledAt,
             @Schema(description = "출발 일시 (READY 상태일 땐 null)") LocalDateTime startedAt,
             @Schema(description = "목적지 장소 정보") PlaceInfo place,
             @Schema(description = "예상 보상 포인트", example = "50") Integer estRewardPoint

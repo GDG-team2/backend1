@@ -16,6 +16,11 @@ public interface MissionRecordRepository extends JpaRepository<MissionRecord, Lo
     Optional<MissionRecord> findByIdAndUserId(Long id, Long userId);
     Optional<MissionRecord> findFirstByUserIdAndStatusInOrderByIdDesc(Long userId, Collection<MissionStatus> statuses);
     List<MissionRecord> findByUserIdAndStatus(Long userId, MissionStatus status);
+    /** 출발을 약속하지 않은 추천 (다시 추천받으면 대체되는 대상) */
+    List<MissionRecord> findByUserIdAndStatusAndScheduledAtIsNull(Long userId, MissionStatus status);
+    Optional<MissionRecord> findFirstByUserIdAndStatusAndScheduledAtIsNullOrderByIdDesc(Long userId, MissionStatus status);
+    /** 출발을 약속한 미션 (가까운 시각 순) */
+    List<MissionRecord> findByUserIdAndStatusAndScheduledAtIsNotNullOrderByScheduledAtAsc(Long userId, MissionStatus status);
     boolean existsByUserIdAndStatusIn(Long userId, Collection<MissionStatus> statuses);
     boolean existsByUserIdAndPlaceIdAndStatus(Long userId, Long placeId, MissionStatus status);
     long countByUserIdAndStatus(Long userId, MissionStatus status);

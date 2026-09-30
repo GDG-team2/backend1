@@ -31,6 +31,7 @@ public class MissionService {
     private static final double ARRIVAL_RADIUS_METERS = 80;
     private static final int ARRIVAL_DWELL_SECONDS = 30;
     private static final int RECENT_PLACE_EXCLUDE_DAYS = 7;
+    private static final int MAX_SCHEDULE_DAYS = 14;
     /** "너무 멀어요"로 거절했을 때 거리 배율 */
     private static final double TOO_FAR_DISTANCE_FACTOR = 0.7;
     /** 같은 날 "멀었어요/피곤해요"로 포기했을 때 거리 배율 */
@@ -92,9 +93,10 @@ public class MissionService {
         Set<String> excludedKakaoIds = new HashSet<>(missionRecordRepository.findPlaceKakaoIdsCompletedSince(
                 userId, MissionStatus.COMPLETED, now.minusDays(RECENT_PLACE_EXCLUDE_DAYS)));
 
-        // 다시 추천: 출발 전(READY) 미션을 대체하고 그 장소는 제외, 거절 이유를 이번 추천에 반영
+        // 다시 추천: 출발을 약속하지 않은 추천(READY)을 대체하고 그 장소는 제외, 거절 이유를 이번 추천에 반영.
+        //           출발을 약속한 예정 미션은 그대로 둔다.
         PlaceCategory rejectedCategory = null;
-        for (MissionRecord previous : missionRecordRepository.findByUserIdAndStatus(userId, MissionStatus.READY)) {
+        for (MissionRecord previous : missionRecordRepository.findByUserIdAndStatusAndScheduledAtIsNull(userId, MissionStatus.READY)) {
             excludedKakaoIds.add(previous.getPlace().getKakaoPlaceId());
             rejectedCategory = previous.getPlaceCategory();
             previous.replaceByNewRecommendation(rejectReason, now);
@@ -147,10 +149,10 @@ public class MissionService {
         String title = missionTextWriter.title(place.getName(), category);
         String reason = missionTextWriter.reason(userId, category, isNewPlace, mood, rejectReason, budget);
 
-        MissionRecord mission = missionRecordRepository.save(
-                new MissionRecord(user, place, category, isNewPlace, title, reason, mood));
-
         int distance = candidate.distanceMeters();
+        MissionRecord mission = missionRecordRepository.save(
+                new MissionRecord(user, place, category, isNewPlace, title, reason, mood, moveType, distance));
+
         return new MissionRecommendResponse(
                 mission.getId(),
                 mission.getStatus().name(),
@@ -168,6 +170,33 @@ public class MissionService {
                 moveType,
                 budget
         );
+    }
+
+    /** 출발 시각을 약속한다(이미 약속했으면 시간 변경). 예정 미션은 여러 개 가질 수 있다. */
+    @Transactional
+    public ScheduledMissionInfo schedule(Long userId, Long missionId, MissionScheduleRequest request) {
+        MissionRecord mission = getMission(userId, missionId);
+        requireStatus(mission, MissionStatus.READY);
+
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime departAt = request.departAt();
+        if (departAt.isBefore(now.minusMinutes(1)) || departAt.isAfter(now.plusDays(MAX_SCHEDULE_DAYS))) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT,
+                    Map.of("departAt", "지금부터 " + MAX_SCHEDULE_DAYS + "일 이내의 시각이어야 합니다"));
+        }
+
+        mission.schedule(departAt);
+        return toScheduledInfo(mission, now);
+    }
+
+    @Transactional(readOnly = true)
+    public ScheduledMissionsResponse getScheduled(Long userId) {
+        LocalDateTime now = LocalDateTime.now();
+        return new ScheduledMissionsResponse(
+                missionRecordRepository.findByUserIdAndStatusAndScheduledAtIsNotNullOrderByScheduledAtAsc(
+                                userId, MissionStatus.READY).stream()
+                        .map(m -> toScheduledInfo(m, now))
+                        .toList());
     }
 
     @Transactional
@@ -271,15 +300,23 @@ public class MissionService {
                 mission.getId(), mission.getStatus().name(), mission.getAbortedAt(), moved, note, "멈춰도 기록은 남아요.");
     }
 
+    /** 앱 복구용: 산책 중인 미션 > 약속하지 않은 추천 > 가장 가까운 예정 미션 */
     @Transactional(readOnly = true)
     public CurrentMissionResponse getCurrent(Long userId) {
-        return missionRecordRepository.findFirstByUserIdAndStatusInOrderByIdDesc(userId, MissionStatus.ACTIVE)
+        Optional<MissionRecord> current = missionRecordRepository
+                .findFirstByUserIdAndStatusInOrderByIdDesc(userId, MissionStatus.WALKING)
+                .or(() -> missionRecordRepository.findFirstByUserIdAndStatusAndScheduledAtIsNullOrderByIdDesc(
+                        userId, MissionStatus.READY))
+                .or(() -> missionRecordRepository.findByUserIdAndStatusAndScheduledAtIsNotNullOrderByScheduledAtAsc(
+                        userId, MissionStatus.READY).stream().findFirst());
+        return current
                 .map(mission -> {
                     Place place = mission.getPlace();
                     return new CurrentMissionResponse(true, new CurrentMissionResponse.ActiveMissionInfo(
                             mission.getId(),
                             mission.getStatus().name(),
                             mission.getMissionTitle(),
+                            mission.getScheduledAt(),
                             mission.getStartedAt(),
                             new CurrentMissionResponse.PlaceInfo(
                                     place.getId(), place.getKakaoPlaceId(), place.getName(), place.getCategory(),
@@ -313,6 +350,27 @@ public class MissionService {
 
     private static List<AbortReason> shorteningAbortReasons() {
         return Arrays.stream(AbortReason.values()).filter(AbortReason::shortensNextMission).toList();
+    }
+
+    private ScheduledMissionInfo toScheduledInfo(MissionRecord mission, LocalDateTime now) {
+        LocalDateTime at = mission.getScheduledAt();
+        long secondsLeft = Duration.between(now, at).getSeconds();
+        long minutesLeft = Math.max(0, (secondsLeft + 59) / 60); // "10분 뒤" 약속이 9분으로 보이지 않도록 올림
+        PlaceCategory category = mission.getPlaceCategory();
+        Integer distance = mission.getDistanceMeters();
+        MoveType moveType = mission.getMoveType();
+        return new ScheduledMissionInfo(
+                mission.getId(),
+                mission.getMissionTitle(),
+                at,
+                (int) minutesLeft,
+                at.isBefore(now),
+                mission.getPlaceNameSnapshot(),
+                category,
+                moveType,
+                distance != null ? PlaceRecommender.oneWayMinutes(distance, moveType) : null,
+                distance != null && category != null ? PlaceRecommender.totalMinutes(distance, moveType, category) : null,
+                category != null ? category.getEstimatedCost() : null);
     }
 
     private MissionRecommendResponse.PlaceInfo toPlaceInfo(Place place) {

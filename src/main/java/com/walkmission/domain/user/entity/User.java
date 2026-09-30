@@ -2,7 +2,6 @@ package com.walkmission.domain.user.entity;
 
 import com.walkmission.global.entity.BaseTimeEntity;
 import jakarta.persistence.*;
-import java.time.LocalDate;
 import java.util.UUID;
 
 @Entity
@@ -20,17 +19,18 @@ public class User extends BaseTimeEntity {
     private String password;
     private String nickname;
     private String profileImageUrl;
-    private LocalDate birth;
+    /** 출생 연도 (선택 입력) */
+    private Integer birthYear;
     private String regionCode;
-    
+
     protected User() {}
 
-    public User(String email, String password, String nickname, LocalDate birth, String regionCode) {
+    public User(String email, String password, String nickname, Integer birthYear, String regionCode) {
         this.userUuid = UUID.randomUUID();
         this.email = email;
         this.password = password;
         this.nickname = nickname;
-        this.birth = birth;
+        this.birthYear = birthYear;
         this.regionCode = regionCode;
     }
 
@@ -40,6 +40,6 @@ public class User extends BaseTimeEntity {
     public String getPassword() { return password; }
     public String getNickname() { return nickname; }
     public String getProfileImageUrl() { return profileImageUrl; }
-    public LocalDate getBirth() { return birth; }
+    public Integer getBirthYear() { return birthYear; }
     public String getRegionCode() { return regionCode; }
 }

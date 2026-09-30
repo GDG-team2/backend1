@@ -34,6 +34,14 @@ public class MissionRecord extends BaseTimeEntity {
     @Enumerated(EnumType.STRING)
     private PlaceCategory placeCategory;
 
+    /** 추천 시점의 이동수단과 직선거리 (예정 미션 목록의 예상 시간 계산용) */
+    @Enumerated(EnumType.STRING)
+    private MoveType moveType;
+    private Integer distanceMeters;
+
+    /** 출발 약속 시각. null이면 약속하지 않은 추천 */
+    private LocalDateTime scheduledAt;
+
     /** 추천받을 때 고른 기분. beforeSurvey는 이를 1~5로 환산한 값 */
     @Enumerated(EnumType.STRING)
     private Mood beforeMood;
@@ -62,11 +70,14 @@ public class MissionRecord extends BaseTimeEntity {
     protected MissionRecord() {}
 
     public MissionRecord(User user, Place place, PlaceCategory placeCategory, boolean isNewPlace,
-                         String missionTitle, String recommendReason, Mood beforeMood) {
+                         String missionTitle, String recommendReason, Mood beforeMood,
+                         MoveType moveType, int distanceMeters) {
         this.user = user;
         this.place = place;
         this.placeNameSnapshot = place.getName();
         this.placeCategory = placeCategory;
+        this.moveType = moveType;
+        this.distanceMeters = distanceMeters;
         this.isNewPlace = isNewPlace;
         this.missionTitle = missionTitle;
         this.recommendReason = recommendReason;
@@ -85,6 +96,12 @@ public class MissionRecord extends BaseTimeEntity {
     /** 반경을 벗어나면 체류 시간을 처음부터 다시 잰다. */
     public void resetArrivalCheck() {
         this.arrivalCheckStartedAt = null;
+    }
+
+    /** 출발 시각을 약속한다. 다시 부르면 시간 변경. */
+    public void schedule(LocalDateTime departAt) {
+        requireStatus(MissionStatus.READY);
+        this.scheduledAt = departAt;
     }
 
     public void start(LocalDateTime now) {
@@ -140,6 +157,9 @@ public class MissionRecord extends BaseTimeEntity {
     public MissionStatus getStatus() { return status; }
     public PlaceCategory getPlaceCategory() { return placeCategory; }
     public Mood getBeforeMood() { return beforeMood; }
+    public MoveType getMoveType() { return moveType != null ? moveType : MoveType.WALK; }
+    public Integer getDistanceMeters() { return distanceMeters; }
+    public LocalDateTime getScheduledAt() { return scheduledAt; }
     public Boolean getIsNewPlace() { return isNewPlace; }
     public Integer getStepCount() { return stepCount; }
     public Integer getBeforeSurvey() { return beforeSurvey; }

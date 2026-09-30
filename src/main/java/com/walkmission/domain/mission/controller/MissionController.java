@@ -28,6 +28,21 @@ public class MissionController {
         return ResponseEntity.ok(missionService.recommend(userId, request));
     }
 
+    @Operation(summary = "출발 약속 (예약) / 시간 변경", description = "추천받은 미션(READY)의 출발 시각을 약속합니다. 이미 약속한 미션에 다시 보내면 시간이 바뀝니다. 약속한 미션은 여러 개 둘 수 있고, 다시 추천을 받아도 대체되지 않습니다. 약속을 취소하려면 포기(abort)를 호출합니다.")
+    @PutMapping("/{missionId}/schedule")
+    public ResponseEntity<ScheduledMissionInfo> scheduleMission(
+            @LoginUser Long userId,
+            @PathVariable Long missionId,
+            @Valid @RequestBody MissionScheduleRequest request) {
+        return ResponseEntity.ok(missionService.schedule(userId, missionId, request));
+    }
+
+    @Operation(summary = "예정 미션 목록", description = "출발을 약속한 미션을 가까운 시각 순으로 조회합니다. 시각이 지나도 패널티 없이 그대로 출발할 수 있습니다(isOverdue).")
+    @GetMapping("/scheduled")
+    public ResponseEntity<ScheduledMissionsResponse> getScheduledMissions(@LoginUser Long userId) {
+        return ResponseEntity.ok(missionService.getScheduled(userId));
+    }
+
     @Operation(summary = "산책 출발", description = "추천된 미션을 수락하고 산책을 시작합니다. 요청 본문은 없습니다. 이미 진행 중인 미션이 있으면 409를 반환합니다.")
     @PostMapping("/{missionId}/start")
     public ResponseEntity<MissionStartResponse> startMission(
