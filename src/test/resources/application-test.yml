@@ -1,0 +1,24 @@
+# 테스트 전용 설정. local 프로필(있으면) 위에 덮어쓴다.
+# - DB: 개발 DB와 분리된 테스트 DB. 실행할 때마다 테이블을 새로 만들고 지운다.
+# - 계정: 로컬은 application-local.yml, CI는 DB_USERNAME/DB_PASSWORD 환경변수
+spring:
+  datasource:
+    url: ${TEST_DB_URL:jdbc:postgresql://localhost:5432/ohakkom_test}
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+
+jwt:
+  secret-key: test-only-secret-key-test-only-secret-key-0123456789
+
+# 카카오는 테스트에서 가짜로 대체한다
+kakao:
+  rest-api-key: test-key
+
+logging:
+  level:
+    root: WARN
