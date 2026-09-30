@@ -17,7 +17,8 @@ public class UserProfile extends BaseTimeEntity {
     private Integer streakRecord;
     private LocalDate lastActiveDate;
     private Integer currentPoint;
-    
+    private Long representativeBadgeId;
+
     protected UserProfile() {}
 
     public UserProfile(User user) {
@@ -33,4 +34,9 @@ public class UserProfile extends BaseTimeEntity {
     public Integer getStreakRecord() { return streakRecord; }
     public LocalDate getLastActiveDate() { return lastActiveDate; }
     public Integer getCurrentPoint() { return currentPoint; }
+    public Long getRepresentativeBadgeId() { return representativeBadgeId; }
+
+    public void changeRepresentativeBadge(Long badgeId) {
+        this.representativeBadgeId = badgeId;
+    }
 }

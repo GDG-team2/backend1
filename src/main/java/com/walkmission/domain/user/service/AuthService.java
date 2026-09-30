@@ -2,6 +2,8 @@ package com.walkmission.domain.user.service;
 
 import com.walkmission.domain.auth.dto.LoginRequest;
 import com.walkmission.domain.auth.dto.LoginResponse;
+import com.walkmission.domain.auth.dto.ReissueRequest;
+import com.walkmission.domain.auth.dto.ReissueResponse;
 import com.walkmission.domain.auth.dto.SignupRequest;
 import com.walkmission.domain.auth.dto.SignupResponse;
 import com.walkmission.domain.user.entity.User;
@@ -13,6 +15,7 @@ import com.walkmission.domain.user.repository.UserProfileRepository;
 import com.walkmission.domain.user.repository.UserRepository;
 import com.walkmission.domain.user.repository.UserSettingRepository;
 import com.walkmission.global.auth.JwtProvider;
+import io.jsonwebtoken.Claims;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -72,5 +75,26 @@ public class AuthService {
         String refreshToken = jwtProvider.createRefreshToken(user.getId());
 
         return new LoginResponse(accessToken, refreshToken, user.getUserUuid(), user.getNickname());
+    }
+
+    public ReissueResponse reissue(ReissueRequest request) {
+        Long userId;
+        try {
+            Claims claims = jwtProvider.getClaims(request.refreshToken());
+            if (!JwtProvider.REFRESH_TOKEN_TYPE.equals(claims.get(JwtProvider.TOKEN_TYPE_CLAIM, String.class))) {
+                throw new IllegalArgumentException("Not a refresh token");
+            }
+            userId = Long.parseLong(claims.getSubject());
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid or expired refresh token");
+        }
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found"));
+
+        String accessToken = jwtProvider.createAccessToken(user.getId(), user.getUserUuid());
+        String refreshToken = jwtProvider.createRefreshToken(user.getId());
+
+        return new ReissueResponse(accessToken, refreshToken);
     }
 }

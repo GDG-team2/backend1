@@ -13,8 +13,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
-import java.time.LocalTime;
-import java.time.format.DateTimeFormatter;
 
 @Service
 public class UserService {
@@ -39,7 +37,7 @@ public class UserService {
             user.getEmail(),
             user.getNickname(),
             user.getProfileImageUrl(),
-            new UserProfileResponse.RegionInfo(user.getRegionCode(), "?????�음"),
+            new UserProfileResponse.RegionInfo(user.getRegionCode(), "지역 정보 없음"),
             new UserProfileResponse.AssetInfo(profile.getCurrentPoint()),
             new UserProfileResponse.StreakInfo(profile.getStreakNow(), profile.getStreakRecord()),
             new UserProfileResponse.BadgeInfo(1L, "걷기 초보", "url"),
@@ -51,8 +49,8 @@ public class UserService {
     public UserSettingsUpdateResponse updateSettings(Long userId, UserSettingsUpdateRequest request) {
         UserSetting setting = userSettingRepository.findByUserId(userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Setting not found"));
-        
-        setting.update(request.quietStart(), request.quietEnd(), request.allAlarm());
+
+        setting.update(request);
 
         return new UserSettingsUpdateResponse(
             setting.getUser().getUserUuid(),
@@ -62,7 +60,7 @@ public class UserService {
             setting.getRankingSetting(), setting.getNameSetting(),
             setting.getPlaceSetting(), setting.getFriendSetting(),
             setting.getUpdatedAt(),
-            "?�정???�공?�으�?변경되?�습?�다."
+            "설정이 성공적으로 변경되었습니다."
         );
     }
 }

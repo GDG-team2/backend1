@@ -20,3 +20,7 @@ build/
 *.log
 *.jar
 *.war
+
+# Build output / temp
+bin/
+temp_starter/

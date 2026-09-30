@@ -28,6 +28,9 @@ public class JwtAuthInterceptor implements HandlerInterceptor {
         String token = header.substring(7);
         try {
             var claims = jwtProvider.getClaims(token);
+            if (!JwtProvider.ACCESS_TOKEN_TYPE.equals(claims.get(JwtProvider.TOKEN_TYPE_CLAIM, String.class))) {
+                throw new IllegalArgumentException("Not an access token");
+            }
             request.setAttribute("userId", Long.parseLong(claims.getSubject()));
             request.setAttribute("userUuid", claims.get("userUuid", String.class));
             return true;

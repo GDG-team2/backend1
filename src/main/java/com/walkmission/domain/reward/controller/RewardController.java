@@ -18,7 +18,6 @@ public class RewardController {
     @Operation(summary = "포인트 적립/사용 거래 내역 조회", description = "사용자의 포인트 적립 및 사용 내역을 페이징하여 조회합니다.")
     @GetMapping("/points/history")
     public ResponseEntity<PointHistoryResponse> getPointHistory(
-            @RequestHeader(value = "Authorization", required = false) String token,
             @RequestParam(defaultValue = "0") Integer page,
             @RequestParam(defaultValue = "20") Integer size) {
         
@@ -35,8 +34,7 @@ public class RewardController {
 
     @Operation(summary = "전체 배지 도감 및 보유 현황 조회", description = "시스템에 등록된 전체 배지 목록과 사용자의 획득 현황을 조회합니다.")
     @GetMapping("/badges")
-    public ResponseEntity<BadgeListResponse> getBadges(
-            @RequestHeader(value = "Authorization", required = false) String token) {
+    public ResponseEntity<BadgeListResponse> getBadges() {
         
         BadgeListResponse response = new BadgeListResponse(
                 new BadgeListResponse.BadgeSummary(20, 5),

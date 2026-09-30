@@ -1,6 +1,7 @@
 package com.walkmission.domain.user.entity;
 
 import com.walkmission.global.entity.BaseTimeEntity;
+import com.walkmission.domain.user.dto.UserSettingsUpdateRequest;
 import jakarta.persistence.*;
 import java.time.LocalTime;
 
@@ -42,10 +43,18 @@ public class UserSetting extends BaseTimeEntity {
         this.friendSetting = true;
     }
     
-    public void update(LocalTime quietStart, LocalTime quietEnd, Boolean allAlarm) {
-        if (quietStart != null) this.quietStart = quietStart;
-        if (quietEnd != null) this.quietEnd = quietEnd;
-        if (allAlarm != null) this.allAlarm = allAlarm;
+    public void update(UserSettingsUpdateRequest request) {
+        if (request.allAlarm() != null) this.allAlarm = request.allAlarm();
+        if (request.startAlarm() != null) this.startAlarm = request.startAlarm();
+        if (request.missionAlarm() != null) this.missionAlarm = request.missionAlarm();
+        if (request.insightAlarm() != null) this.insightAlarm = request.insightAlarm();
+        if (request.rewardAlarm() != null) this.rewardAlarm = request.rewardAlarm();
+        if (request.quietStart() != null) this.quietStart = request.quietStart();
+        if (request.quietEnd() != null) this.quietEnd = request.quietEnd();
+        if (request.rankingSetting() != null) this.rankingSetting = request.rankingSetting();
+        if (request.nameSetting() != null) this.nameSetting = request.nameSetting();
+        if (request.placeSetting() != null) this.placeSetting = request.placeSetting();
+        if (request.friendSetting() != null) this.friendSetting = request.friendSetting();
     }
 
     public Long getId() { return id; }

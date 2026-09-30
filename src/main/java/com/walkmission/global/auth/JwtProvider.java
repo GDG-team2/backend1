@@ -17,6 +17,10 @@ public class JwtProvider {
     private final long accessExpiration = 1000 * 60 * 30; // 30분
     private final long refreshExpiration = 1000 * 60 * 60 * 24 * 14; // 14일
 
+    public static final String TOKEN_TYPE_CLAIM = "type";
+    public static final String ACCESS_TOKEN_TYPE = "access";
+    public static final String REFRESH_TOKEN_TYPE = "refresh";
+
     public JwtProvider(@Value("${jwt.secret-key}") String secret) {
         this.secretKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
@@ -25,6 +29,7 @@ public class JwtProvider {
         return Jwts.builder()
                 .subject(userId.toString())
                 .claim("userUuid", userUuid.toString())
+                .claim(TOKEN_TYPE_CLAIM, ACCESS_TOKEN_TYPE)
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + accessExpiration))
                 .signWith(secretKey)
@@ -34,6 +39,7 @@ public class JwtProvider {
     public String createRefreshToken(Long userId) {
         return Jwts.builder()
                 .subject(userId.toString())
+                .claim(TOKEN_TYPE_CLAIM, REFRESH_TOKEN_TYPE)
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + refreshExpiration))
                 .signWith(secretKey)

@@ -18,7 +18,6 @@ public class RankingController {
     @Operation(summary = "내 동네 주간 랭킹 리더보드 조회", description = "현재 사용자가 속한 동네의 주간 랭킹 리더보드를 조회합니다.")
     @GetMapping("/my-region")
     public ResponseEntity<RegionRankingResponse> getMyRegionRanking(
-            @RequestHeader(value = "Authorization", required = false) String token,
             @RequestParam(defaultValue = "50") Integer limit) {
         
         RegionRankingResponse response = new RegionRankingResponse(

@@ -2,6 +2,8 @@ package com.walkmission.domain.auth.controller;
 
 import com.walkmission.domain.auth.dto.LoginRequest;
 import com.walkmission.domain.auth.dto.LoginResponse;
+import com.walkmission.domain.auth.dto.ReissueRequest;
+import com.walkmission.domain.auth.dto.ReissueResponse;
 import com.walkmission.domain.auth.dto.SignupRequest;
 import com.walkmission.domain.auth.dto.SignupResponse;
 import com.walkmission.domain.user.service.AuthService;
@@ -34,6 +36,13 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
         LoginResponse response = authService.login(request);
+        return ResponseEntity.ok(response);
+    }
+
+    @Operation(summary = "토큰 재발급", description = "리프레시 토큰을 검증하고 새로운 액세스 토큰과 리프레시 토큰을 발급합니다.")
+    @PostMapping("/reissue")
+    public ResponseEntity<ReissueResponse> reissue(@Valid @RequestBody ReissueRequest request) {
+        ReissueResponse response = authService.reissue(request);
         return ResponseEntity.ok(response);
     }
 }

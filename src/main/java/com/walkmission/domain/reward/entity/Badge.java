@@ -9,9 +9,19 @@ public class Badge {
     private Long id;
 
     private String badgeName;
-    
+
+    private String description;
+
+    private String iconUrl;
+
     @Column(columnDefinition = "TEXT")
     private String badgeCondition;
 
     protected Badge() {}
+
+    public Long getId() { return id; }
+    public String getBadgeName() { return badgeName; }
+    public String getDescription() { return description; }
+    public String getIconUrl() { return iconUrl; }
+    public String getBadgeCondition() { return badgeCondition; }
 }
