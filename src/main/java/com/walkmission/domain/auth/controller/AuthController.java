@@ -8,6 +8,7 @@ import com.walkmission.domain.auth.dto.SignupRequest;
 import com.walkmission.domain.auth.dto.SignupResponse;
 import com.walkmission.domain.user.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -26,6 +27,7 @@ public class AuthController {
     }
 
     @Operation(summary = "회원가입", description = "새로운 사용자를 등록합니다.")
+    @ApiResponse(responseCode = "201", description = "가입 완료")
     @PostMapping("/signup")
     public ResponseEntity<SignupResponse> signup(@Valid @RequestBody SignupRequest request) {
         SignupResponse response = authService.signup(request);

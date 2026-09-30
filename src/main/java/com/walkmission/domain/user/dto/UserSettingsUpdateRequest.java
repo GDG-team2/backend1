@@ -12,11 +12,11 @@ public record UserSettingsUpdateRequest(
         @Schema(description = "인사이트 알림", example = "true") Boolean insightAlarm,
         @Schema(description = "보상 알림", example = "true") Boolean rewardAlarm,
         
-        @Schema(description = "방해 금지 시작 시간", example = "22:00:00") 
-        @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "HH:mm:ss") LocalTime quietStart,
+        @Schema(description = "방해 금지 시작 시간 (HH:mm 또는 HH:mm:ss)", example = "22:00") 
+        @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "HH:mm[:ss]") LocalTime quietStart,
         
-        @Schema(description = "방해 금지 종료 시간", example = "07:00:00") 
-        @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "HH:mm:ss") LocalTime quietEnd,
+        @Schema(description = "방해 금지 종료 시간 (HH:mm 또는 HH:mm:ss)", example = "07:00") 
+        @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "HH:mm[:ss]") LocalTime quietEnd,
         
         @Schema(description = "랭킹 공개 설정", example = "true") Boolean rankingSetting,
         @Schema(description = "이름 공개 설정", example = "true") Boolean nameSetting,
