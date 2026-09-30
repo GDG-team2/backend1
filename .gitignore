@@ -24,3 +24,6 @@ build/
 # Build output / temp
 bin/
 temp_starter/
+
+# 디자인 원본 캡처 (공개 저장소에 올리지 않음)
+docs/figma/
