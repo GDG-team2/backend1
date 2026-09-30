@@ -22,4 +22,19 @@ public class RankingHistory extends BaseTimeEntity {
     private LocalDate endDate;
 
     protected RankingHistory() {}
+
+    public RankingHistory(User user, Integer userRank, Integer userScore, LocalDate startDate, LocalDate endDate) {
+        this.user = user;
+        this.userRank = userRank;
+        this.userScore = userScore;
+        this.startDate = startDate;
+        this.endDate = endDate;
+    }
+
+    public Long getId() { return id; }
+    public User getUser() { return user; }
+    public Integer getUserRank() { return userRank; }
+    public Integer getUserScore() { return userScore; }
+    public LocalDate getStartDate() { return startDate; }
+    public LocalDate getEndDate() { return endDate; }
 }

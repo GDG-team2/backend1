@@ -19,4 +19,13 @@ public class UserBadge extends BaseTimeEntity {
     private Badge badge;
 
     protected UserBadge() {}
+
+    public UserBadge(User user, Badge badge) {
+        this.user = user;
+        this.badge = badge;
+    }
+
+    public Long getId() { return id; }
+    public User getUser() { return user; }
+    public Badge getBadge() { return badge; }
 }

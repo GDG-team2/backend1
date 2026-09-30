@@ -7,6 +7,9 @@ import com.walkmission.domain.mission.entity.Place;
 import com.walkmission.domain.mission.exception.NotEnoughDistanceException;
 import com.walkmission.domain.mission.repository.MissionRecordRepository;
 import com.walkmission.domain.mission.repository.PlaceRepository;
+import com.walkmission.domain.ranking.service.RankingService;
+import com.walkmission.domain.reward.RewardPolicy;
+import com.walkmission.domain.reward.entity.Badge;
 import com.walkmission.domain.reward.service.RewardService;
 import com.walkmission.domain.user.entity.User;
 import com.walkmission.domain.user.repository.UserRepository;
@@ -28,20 +31,21 @@ public class MissionService {
     private static final double SEARCH_RADIUS_METERS = 3_000;
     private static final double METERS_PER_DEGREE_LATITUDE = 111_320;
     private static final double WALK_METERS_PER_MINUTE = 67; // 약 4km/h
-    // TODO(Phase 3-3): 거리/신규 장소 등을 반영한 보상 정책으로 교체
-    private static final int MISSION_REWARD_POINT = 50;
 
     private final MissionRecordRepository missionRecordRepository;
     private final PlaceRepository placeRepository;
     private final UserRepository userRepository;
     private final RewardService rewardService;
+    private final RankingService rankingService;
 
     public MissionService(MissionRecordRepository missionRecordRepository, PlaceRepository placeRepository,
-                          UserRepository userRepository, RewardService rewardService) {
+                          UserRepository userRepository, RewardService rewardService,
+                          RankingService rankingService) {
         this.missionRecordRepository = missionRecordRepository;
         this.placeRepository = placeRepository;
         this.userRepository = userRepository;
         this.rewardService = rewardService;
+        this.rankingService = rankingService;
     }
 
     @Transactional
@@ -74,7 +78,7 @@ public class MissionService {
                         place.getRoadAddress(), place.getLatitude(), place.getLongitude()),
                 distance,
                 (int) Math.ceil(distance / WALK_METERS_PER_MINUTE),
-                MISSION_REWARD_POINT
+                RewardPolicy.MISSION_COMPLETE_POINT
         );
     }
 
@@ -121,19 +125,27 @@ public class MissionService {
 
         mission.complete(request.afterSurveyScore(), request.stepCount(), LocalDateTime.now());
 
+        // 정산 순서: 포인트 → 스트릭 → 랭킹 → 배지 (배지 조건이 갱신된 스트릭/완료 횟수를 참조)
+        User user = mission.getUser();
+        int earnedPoint = RewardPolicy.MISSION_COMPLETE_POINT;
         int currentTotalPoint = rewardService.earnPoint(
-                mission.getUser(), MISSION_REWARD_POINT, "미션 완료 보상 - " + mission.getPlaceNameSnapshot());
+                user, earnedPoint, "미션 완료 보상 - " + mission.getPlaceNameSnapshot());
+        RewardService.StreakResult streak = rewardService.recordStreak(user.getId());
+        RankingService.ScoreResult score = rankingService.addMissionScore(user);
+        List<Badge> newBadges = rewardService.awardBadges(user);
 
-        // TODO(Phase 3-3): 랭킹 점수, 스트릭, 배지 정산
         return new MissionCompleteResponse(
                 mission.getId(),
                 mission.getStatus().name(),
                 mission.getCompletedAt(),
                 mission.getStepCount(),
-                new MissionCompleteResponse.RewardInfo(MISSION_REWARD_POINT, currentTotalPoint),
-                new MissionCompleteResponse.RankingInfo(false, 0, 0),
-                new MissionCompleteResponse.StreakInfo(0, false),
-                List.of()
+                new MissionCompleteResponse.RewardInfo(earnedPoint, currentTotalPoint),
+                new MissionCompleteResponse.RankingInfo(score.isParticipant(), score.earnedScore(), score.weeklyScore()),
+                new MissionCompleteResponse.StreakInfo(streak.streakNow(), streak.isMaintained()),
+                newBadges.stream()
+                        .map(b -> new MissionCompleteResponse.BadgeInfo(
+                                b.getId(), b.getBadgeName(), b.getDescription(), b.getIconUrl()))
+                        .toList()
         );
     }
 
@@ -162,7 +174,7 @@ public class MissionService {
                             new CurrentMissionResponse.PlaceInfo(
                                     place.getId(), place.getKakaoPlaceId(), place.getName(), place.getCategory(),
                                     place.getRoadAddress(), place.getLatitude(), place.getLongitude()),
-                            MISSION_REWARD_POINT));
+                            RewardPolicy.MISSION_COMPLETE_POINT));
                 })
                 .orElse(new CurrentMissionResponse(false, null));
     }

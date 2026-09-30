@@ -2,6 +2,7 @@ package com.walkmission.domain.user.service;
 
 import com.walkmission.domain.mission.entity.MissionStatus;
 import com.walkmission.domain.mission.repository.MissionRecordRepository;
+import com.walkmission.domain.reward.repository.BadgeRepository;
 import com.walkmission.domain.user.dto.UserProfileResponse;
 import com.walkmission.domain.user.dto.UserSettingsUpdateRequest;
 import com.walkmission.domain.user.dto.UserSettingsUpdateResponse;
@@ -11,6 +12,8 @@ import com.walkmission.domain.user.entity.UserSetting;
 import com.walkmission.domain.user.repository.UserProfileRepository;
 import com.walkmission.domain.user.repository.UserRepository;
 import com.walkmission.domain.user.repository.UserSettingRepository;
+import com.walkmission.global.util.RegionUtils;
+import com.walkmission.global.util.TimeUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,13 +25,15 @@ public class UserService {
     private final UserProfileRepository userProfileRepository;
     private final UserSettingRepository userSettingRepository;
     private final MissionRecordRepository missionRecordRepository;
+    private final BadgeRepository badgeRepository;
 
     public UserService(UserRepository userRepository, UserProfileRepository userProfileRepository, UserSettingRepository userSettingRepository,
-                       MissionRecordRepository missionRecordRepository) {
+                       MissionRecordRepository missionRecordRepository, BadgeRepository badgeRepository) {
         this.userRepository = userRepository;
         this.userProfileRepository = userProfileRepository;
         this.userSettingRepository = userSettingRepository;
         this.missionRecordRepository = missionRecordRepository;
+        this.badgeRepository = badgeRepository;
     }
 
     public UserProfileResponse getProfile(Long userId) {
@@ -37,16 +42,20 @@ public class UserService {
         UserProfile profile = userProfileRepository.findByUserId(userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Profile not found"));
         long completedMissions = missionRecordRepository.countByUserIdAndStatus(userId, MissionStatus.COMPLETED);
+        UserProfileResponse.BadgeInfo representativeBadge = profile.getRepresentativeBadgeId() == null ? null
+                : badgeRepository.findById(profile.getRepresentativeBadgeId())
+                        .map(b -> new UserProfileResponse.BadgeInfo(b.getId(), b.getBadgeName(), b.getIconUrl()))
+                        .orElse(null);
 
         return new UserProfileResponse(
             user.getUserUuid(),
             user.getEmail(),
             user.getNickname(),
             user.getProfileImageUrl(),
-            new UserProfileResponse.RegionInfo(user.getRegionCode(), "지역 정보 없음"),
+            new UserProfileResponse.RegionInfo(user.getRegionCode(), RegionUtils.nameOf(user.getRegionCode())),
             new UserProfileResponse.AssetInfo(profile.getCurrentPoint()),
-            new UserProfileResponse.StreakInfo(profile.getStreakNow(), profile.getStreakRecord()),
-            new UserProfileResponse.BadgeInfo(1L, "걷기 초보", "url"),
+            new UserProfileResponse.StreakInfo(profile.getStreakAsOf(TimeUtils.today()), profile.getStreakRecord()),
+            representativeBadge,
             new UserProfileResponse.StatsInfo((int) completedMissions)
         );
     }
