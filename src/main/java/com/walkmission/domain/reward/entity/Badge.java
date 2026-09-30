@@ -1,9 +1,10 @@
 package com.walkmission.domain.reward.entity;
 
+import com.walkmission.global.entity.BaseTimeEntity;
 import jakarta.persistence.*;
 
 @Entity
-public class Badge {
+public class Badge extends BaseTimeEntity {
 
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

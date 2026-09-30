@@ -1,11 +1,12 @@
 package com.walkmission.domain.ranking.entity;
 
 import com.walkmission.domain.user.entity.User;
+import com.walkmission.global.entity.BaseTimeEntity;
 import jakarta.persistence.*;
 import java.time.LocalDate;
 
 @Entity
-public class RankingHistory {
+public class RankingHistory extends BaseTimeEntity {
 
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

@@ -22,4 +22,17 @@ public class PointHistory extends BaseTimeEntity {
     private String description;
 
     protected PointHistory() {}
+
+    public PointHistory(User user, Integer amount, PointType type, String description) {
+        this.user = user;
+        this.amount = amount;
+        this.type = type;
+        this.description = description;
+    }
+
+    public Long getId() { return id; }
+    public User getUser() { return user; }
+    public Integer getAmount() { return amount; }
+    public PointType getType() { return type; }
+    public String getDescription() { return description; }
 }

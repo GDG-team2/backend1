@@ -1,9 +1,10 @@
 package com.walkmission.domain.user.entity;
 
+import com.walkmission.global.entity.BaseTimeEntity;
 import jakarta.persistence.*;
 
 @Entity
-public class UserMissionPreference {
+public class UserMissionPreference extends BaseTimeEntity {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 

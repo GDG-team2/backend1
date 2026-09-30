@@ -1,5 +1,7 @@
 package com.walkmission.domain.user.service;
 
+import com.walkmission.domain.mission.entity.MissionStatus;
+import com.walkmission.domain.mission.repository.MissionRecordRepository;
 import com.walkmission.domain.user.dto.UserProfileResponse;
 import com.walkmission.domain.user.dto.UserSettingsUpdateRequest;
 import com.walkmission.domain.user.dto.UserSettingsUpdateResponse;
@@ -19,11 +21,14 @@ public class UserService {
     private final UserRepository userRepository;
     private final UserProfileRepository userProfileRepository;
     private final UserSettingRepository userSettingRepository;
+    private final MissionRecordRepository missionRecordRepository;
 
-    public UserService(UserRepository userRepository, UserProfileRepository userProfileRepository, UserSettingRepository userSettingRepository) {
+    public UserService(UserRepository userRepository, UserProfileRepository userProfileRepository, UserSettingRepository userSettingRepository,
+                       MissionRecordRepository missionRecordRepository) {
         this.userRepository = userRepository;
         this.userProfileRepository = userProfileRepository;
         this.userSettingRepository = userSettingRepository;
+        this.missionRecordRepository = missionRecordRepository;
     }
 
     public UserProfileResponse getProfile(Long userId) {
@@ -31,6 +36,7 @@ public class UserService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
         UserProfile profile = userProfileRepository.findByUserId(userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Profile not found"));
+        long completedMissions = missionRecordRepository.countByUserIdAndStatus(userId, MissionStatus.COMPLETED);
 
         return new UserProfileResponse(
             user.getUserUuid(),
@@ -41,7 +47,7 @@ public class UserService {
             new UserProfileResponse.AssetInfo(profile.getCurrentPoint()),
             new UserProfileResponse.StreakInfo(profile.getStreakNow(), profile.getStreakRecord()),
             new UserProfileResponse.BadgeInfo(1L, "걷기 초보", "url"),
-            new UserProfileResponse.StatsInfo(0)
+            new UserProfileResponse.StatsInfo((int) completedMissions)
         );
     }
 

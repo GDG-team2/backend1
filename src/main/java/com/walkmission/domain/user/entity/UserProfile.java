@@ -36,6 +36,10 @@ public class UserProfile extends BaseTimeEntity {
     public Integer getCurrentPoint() { return currentPoint; }
     public Long getRepresentativeBadgeId() { return representativeBadgeId; }
 
+    public void addPoint(int amount) {
+        this.currentPoint += amount;
+    }
+
     public void changeRepresentativeBadge(Long badgeId) {
         this.representativeBadgeId = badgeId;
     }
