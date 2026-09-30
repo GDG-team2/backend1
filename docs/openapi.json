@@ -7,8 +7,12 @@
   },
   "servers": [
     {
+      "url": "https://ohakkom-backend.onrender.com",
+      "description": "개발 서버 (Render 무료, 첫 요청은 30초~1분 걸릴 수 있음)"
+    },
+    {
       "url": "http://localhost:8081",
-      "description": "Generated server url"
+      "description": "로컬"
     }
   ],
   "security": [
