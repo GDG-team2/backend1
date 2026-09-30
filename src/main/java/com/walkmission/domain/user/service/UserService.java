@@ -3,12 +3,16 @@ package com.walkmission.domain.user.service;
 import com.walkmission.domain.mission.entity.MissionStatus;
 import com.walkmission.domain.mission.repository.MissionRecordRepository;
 import com.walkmission.domain.reward.repository.BadgeRepository;
+import com.walkmission.domain.user.dto.PreferenceResponse;
+import com.walkmission.domain.user.dto.PreferenceUpdateRequest;
 import com.walkmission.domain.user.dto.UserProfileResponse;
 import com.walkmission.domain.user.dto.UserSettingsUpdateRequest;
 import com.walkmission.domain.user.dto.UserSettingsUpdateResponse;
 import com.walkmission.domain.user.entity.User;
+import com.walkmission.domain.user.entity.UserMissionPreference;
 import com.walkmission.domain.user.entity.UserProfile;
 import com.walkmission.domain.user.entity.UserSetting;
+import com.walkmission.domain.user.repository.UserMissionPreferenceRepository;
 import com.walkmission.domain.user.repository.UserProfileRepository;
 import com.walkmission.domain.user.repository.UserRepository;
 import com.walkmission.domain.user.repository.UserSettingRepository;
@@ -26,14 +30,17 @@ public class UserService {
     private final UserSettingRepository userSettingRepository;
     private final MissionRecordRepository missionRecordRepository;
     private final BadgeRepository badgeRepository;
+    private final UserMissionPreferenceRepository preferenceRepository;
 
     public UserService(UserRepository userRepository, UserProfileRepository userProfileRepository, UserSettingRepository userSettingRepository,
-                       MissionRecordRepository missionRecordRepository, BadgeRepository badgeRepository) {
+                       MissionRecordRepository missionRecordRepository, BadgeRepository badgeRepository,
+                       UserMissionPreferenceRepository preferenceRepository) {
         this.userRepository = userRepository;
         this.userProfileRepository = userProfileRepository;
         this.userSettingRepository = userSettingRepository;
         this.missionRecordRepository = missionRecordRepository;
         this.badgeRepository = badgeRepository;
+        this.preferenceRepository = preferenceRepository;
     }
 
     public UserProfileResponse getProfile(Long userId) {
@@ -77,5 +84,29 @@ public class UserService {
             setting.getUpdatedAt(),
             "설정이 성공적으로 변경되었습니다."
         );
+    }
+
+    @Transactional(readOnly = true)
+    public PreferenceResponse getPreference(Long userId) {
+        return toPreferenceResponse(getPreferenceEntity(userId));
+    }
+
+    @Transactional
+    public PreferenceResponse updatePreference(Long userId, PreferenceUpdateRequest request) {
+        UserMissionPreference preference = getPreferenceEntity(userId);
+        preference.update(request.walkTime(), request.moveType(), request.categories());
+        return toPreferenceResponse(preference);
+    }
+
+    private UserMissionPreference getPreferenceEntity(Long userId) {
+        return preferenceRepository.findByUserId(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+    }
+
+    private PreferenceResponse toPreferenceResponse(UserMissionPreference preference) {
+        return new PreferenceResponse(
+                preference.getWalkTime(),
+                preference.getMoveType(),
+                preference.getEffectiveCategories().stream().sorted().toList());
     }
 }

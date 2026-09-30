@@ -5,6 +5,7 @@ import com.walkmission.domain.mission.entity.MissionStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -19,4 +20,8 @@ public interface MissionRecordRepository extends JpaRepository<MissionRecord, Lo
 
     @Query("select count(distinct m.place.id) from MissionRecord m where m.user.id = :userId and m.status = :status")
     long countDistinctPlaces(@Param("userId") Long userId, @Param("status") MissionStatus status);
+
+    @Query("select distinct m.place.kakaoPlaceId from MissionRecord m where m.user.id = :userId and m.status = :status and m.completedAt >= :since")
+    List<String> findPlaceKakaoIdsCompletedSince(@Param("userId") Long userId, @Param("status") MissionStatus status,
+                                                 @Param("since") LocalDateTime since);
 }

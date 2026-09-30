@@ -24,6 +24,7 @@ public record CurrentMissionResponse(
             @Schema(description = "장소 카테고리", example = "공원") String category,
             @Schema(description = "도로명 주소", example = "서울특별시 강남구 역삼로 123") String roadAddress,
             @Schema(description = "장소 위도", example = "37.499000") BigDecimal latitude,
-            @Schema(description = "장소 경도", example = "127.028000") BigDecimal longitude
+            @Schema(description = "장소 경도", example = "127.028000") BigDecimal longitude,
+            @Schema(description = "카카오맵 장소 상세 URL", example = "http://place.map.kakao.com/18577297") String placeUrl
     ) {}
 }

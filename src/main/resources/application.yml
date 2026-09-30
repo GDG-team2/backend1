@@ -25,3 +25,6 @@ springdoc:
 
 jwt:
   secret-key: ${JWT_SECRET:this_is_a_very_long_secret_key_for_local_development_only_please_change_in_production}
+
+kakao:
+  rest-api-key: ${KAKAO_REST_API_KEY:}

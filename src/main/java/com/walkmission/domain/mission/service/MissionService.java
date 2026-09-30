@@ -3,6 +3,8 @@ package com.walkmission.domain.mission.service;
 import com.walkmission.domain.mission.dto.*;
 import com.walkmission.domain.mission.entity.MissionRecord;
 import com.walkmission.domain.mission.entity.MissionStatus;
+import com.walkmission.domain.mission.entity.MoveType;
+import com.walkmission.domain.mission.entity.PlaceCategory;
 import com.walkmission.domain.mission.entity.Place;
 import com.walkmission.domain.mission.repository.MissionRecordRepository;
 import com.walkmission.domain.mission.repository.PlaceRepository;
@@ -11,7 +13,10 @@ import com.walkmission.domain.reward.RewardPolicy;
 import com.walkmission.domain.reward.entity.Badge;
 import com.walkmission.domain.reward.service.RewardService;
 import com.walkmission.domain.user.entity.User;
+import com.walkmission.domain.user.entity.UserMissionPreference;
+import com.walkmission.domain.user.repository.UserMissionPreferenceRepository;
 import com.walkmission.domain.user.repository.UserRepository;
+import com.walkmission.global.external.kakao.KakaoPlace;
 import com.walkmission.global.util.GeoUtils;
 import com.walkmission.global.error.BusinessException;
 import com.walkmission.global.error.ErrorCode;
@@ -19,33 +24,37 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDateTime;
-import java.util.Comparator;
+import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class MissionService {
     private static final double ARRIVAL_RADIUS_METERS = 50;
-    private static final double SEARCH_RADIUS_METERS = 3_000;
-    private static final double METERS_PER_DEGREE_LATITUDE = 111_320;
-    private static final double WALK_METERS_PER_MINUTE = 67; // 약 4km/h
+    private static final int RECENT_PLACE_EXCLUDE_DAYS = 7;
 
     private final MissionRecordRepository missionRecordRepository;
     private final PlaceRepository placeRepository;
     private final UserRepository userRepository;
     private final RewardService rewardService;
     private final RankingService rankingService;
+    private final UserMissionPreferenceRepository preferenceRepository;
+    private final PlaceRecommender placeRecommender;
 
     public MissionService(MissionRecordRepository missionRecordRepository, PlaceRepository placeRepository,
                           UserRepository userRepository, RewardService rewardService,
-                          RankingService rankingService) {
+                          RankingService rankingService, UserMissionPreferenceRepository preferenceRepository,
+                          PlaceRecommender placeRecommender) {
         this.missionRecordRepository = missionRecordRepository;
         this.placeRepository = placeRepository;
         this.userRepository = userRepository;
         this.rewardService = rewardService;
         this.rankingService = rankingService;
+        this.preferenceRepository = preferenceRepository;
+        this.placeRecommender = placeRecommender;
     }
 
     @Transactional
@@ -57,14 +66,29 @@ public class MissionService {
             throw new BusinessException(ErrorCode.ACTIVE_MISSION_EXISTS);
         }
 
-        // 출발 전(READY) 미션은 새 추천으로 대체한다.
-        LocalDateTime now = LocalDateTime.now();
-        missionRecordRepository.findByUserIdAndStatus(userId, MissionStatus.READY)
-                .forEach(mission -> mission.abort(now));
+        // 요청 값 > 선호 설정 > 기본값 순으로 적용
+        UserMissionPreference preference = preferenceRepository.findByUserId(userId).orElse(null);
+        int walkTime = preference != null ? preference.getWalkTime() : UserMissionPreference.DEFAULT_WALK_TIME;
+        MoveType moveType = request.moveType() != null ? request.moveType()
+                : preference != null ? preference.getMoveType() : MoveType.WALK;
+        Set<PlaceCategory> categories = request.category() != null ? EnumSet.of(request.category())
+                : preference != null ? preference.getEffectiveCategories() : EnumSet.allOf(PlaceCategory.class);
 
-        Place place = findNearestPlace(request.latitude(), request.longitude());
-        int distance = (int) Math.round(GeoUtils.distanceMeters(
-                request.latitude(), request.longitude(), place.getLatitude(), place.getLongitude()));
+        // 최근 완료한 곳과, 다시 추천받기 전의 장소는 제외한다.
+        LocalDateTime now = LocalDateTime.now();
+        Set<String> excludedKakaoIds = new HashSet<>(missionRecordRepository.findPlaceKakaoIdsCompletedSince(
+                userId, MissionStatus.COMPLETED, now.minusDays(RECENT_PLACE_EXCLUDE_DAYS)));
+
+        // 출발 전(READY) 미션은 새 추천으로 대체한다.
+        missionRecordRepository.findByUserIdAndStatus(userId, MissionStatus.READY).forEach(mission -> {
+            excludedKakaoIds.add(mission.getPlace().getKakaoPlaceId());
+            mission.abort(now);
+        });
+
+        PlaceRecommender.Candidate candidate = placeRecommender.recommend(
+                request.latitude().doubleValue(), request.longitude().doubleValue(),
+                walkTime, moveType, categories, excludedKakaoIds);
+        Place place = findOrCreatePlace(candidate.place());
         boolean isNewPlace = !missionRecordRepository.existsByUserIdAndPlaceIdAndStatus(
                 userId, place.getId(), MissionStatus.COMPLETED);
 
@@ -75,10 +99,12 @@ public class MissionService {
                 mission.getStatus().name(),
                 new MissionRecommendResponse.PlaceInfo(
                         place.getId(), place.getKakaoPlaceId(), place.getName(), place.getCategory(),
-                        place.getRoadAddress(), place.getLatitude(), place.getLongitude()),
-                distance,
-                (int) Math.ceil(distance / WALK_METERS_PER_MINUTE),
-                RewardPolicy.MISSION_COMPLETE_POINT
+                        place.getRoadAddress(), place.getLatitude(), place.getLongitude(), place.getPlaceUrl()),
+                candidate.distanceMeters(),
+                PlaceRecommender.estimateMinutes(candidate.distanceMeters(), moveType),
+                RewardPolicy.MISSION_COMPLETE_POINT,
+                candidate.category(),
+                moveType
         );
     }
 
@@ -173,29 +199,24 @@ public class MissionService {
                             mission.getStartedAt(),
                             new CurrentMissionResponse.PlaceInfo(
                                     place.getId(), place.getKakaoPlaceId(), place.getName(), place.getCategory(),
-                                    place.getRoadAddress(), place.getLatitude(), place.getLongitude()),
+                                    place.getRoadAddress(), place.getLatitude(), place.getLongitude(),
+                                    place.getPlaceUrl()),
                             RewardPolicy.MISSION_COMPLETE_POINT));
                 })
                 .orElse(new CurrentMissionResponse(false, null));
     }
 
-    private Place findNearestPlace(BigDecimal latitude, BigDecimal longitude) {
-        // 위경도 사각형으로 후보를 좁힌 뒤 실제 거리로 가장 가까운 장소를 고른다.
-        double latDelta = SEARCH_RADIUS_METERS / METERS_PER_DEGREE_LATITUDE;
-        double lonDelta = SEARCH_RADIUS_METERS
-                / (METERS_PER_DEGREE_LATITUDE * Math.cos(Math.toRadians(latitude.doubleValue())));
-
-        return placeRepository.findByIsClosedFalseAndLatitudeBetweenAndLongitudeBetween(
-                        offset(latitude, -latDelta), offset(latitude, latDelta),
-                        offset(longitude, -lonDelta), offset(longitude, lonDelta))
-                .stream()
-                .min(Comparator.comparingDouble(place -> GeoUtils.distanceMeters(
-                        latitude, longitude, place.getLatitude(), place.getLongitude())))
-                .orElseThrow(() -> new BusinessException(ErrorCode.NO_NEARBY_PLACE));
-    }
-
-    private BigDecimal offset(BigDecimal value, double delta) {
-        return value.add(BigDecimal.valueOf(delta)).setScale(7, RoundingMode.HALF_UP);
+    /** 카카오 장소를 Place 테이블에 저장(이미 있으면 재사용)한다. */
+    private Place findOrCreatePlace(KakaoPlace kakaoPlace) {
+        return placeRepository.findByKakaoPlaceId(kakaoPlace.id())
+                .orElseGet(() -> placeRepository.save(new Place(
+                        kakaoPlace.id(),
+                        kakaoPlace.placeName(),
+                        kakaoPlace.address(),
+                        kakaoPlace.leafCategory(),
+                        new BigDecimal(kakaoPlace.y()),
+                        new BigDecimal(kakaoPlace.x()),
+                        kakaoPlace.placeUrl())));
     }
 
     private MissionRecord getMission(Long userId, Long missionId) {

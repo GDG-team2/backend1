@@ -26,11 +26,12 @@ public class Place extends BaseTimeEntity {
     private Boolean isSponsored;
     private String rewardInfo;
     private Boolean isClosed;
+    private String placeUrl;
 
     protected Place() {}
 
     public Place(String kakaoPlaceId, String name, String roadAddress, String category,
-                 BigDecimal latitude, BigDecimal longitude) {
+                 BigDecimal latitude, BigDecimal longitude, String placeUrl) {
         this.kakaoPlaceId = kakaoPlaceId;
         this.name = name;
         this.roadAddress = roadAddress;
@@ -39,6 +40,7 @@ public class Place extends BaseTimeEntity {
         this.longitude = longitude;
         this.isSponsored = false;
         this.isClosed = false;
+        this.placeUrl = placeUrl;
     }
 
     public Long getId() { return id; }
@@ -51,4 +53,5 @@ public class Place extends BaseTimeEntity {
     public Boolean getIsSponsored() { return isSponsored; }
     public String getRewardInfo() { return rewardInfo; }
     public Boolean getIsClosed() { return isClosed; }
+    public String getPlaceUrl() { return placeUrl; }
 }
