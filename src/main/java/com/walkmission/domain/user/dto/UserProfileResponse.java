@@ -39,8 +39,8 @@ public record UserProfileResponse(
         StatsInfo stats
 ) {
     public record RegionInfo(
-            @Schema(description = "동네 코드", example = "1168010100") String regionCode,
-            @Schema(description = "동네 이름", example = "서울특별시 강남구 역삼동") String regionName
+            @Schema(description = "동네 코드", example = "1174010800") String regionCode,
+            @Schema(description = "동네 이름", example = "서울특별시 강동구 성내동") String regionName
     ) {}
 
     public record AssetInfo(

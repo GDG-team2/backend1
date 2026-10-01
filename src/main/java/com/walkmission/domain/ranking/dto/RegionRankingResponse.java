@@ -7,14 +7,14 @@ import java.util.UUID;
 
 @Schema(description = "동네 주간 랭킹 리더보드 응답 DTO")
 public record RegionRankingResponse(
-        @Schema(description = "동네 정보") RegionInfo region,
+        @Schema(description = "랭킹 지역 (시·군·구 단위)") RegionInfo region,
         @Schema(description = "주간 기간 정보") WeekPeriodInfo weekPeriod,
         @Schema(description = "나의 랭킹 정보") RankingEntry myRanking,
         @Schema(description = "리더보드 목록") List<RankingEntry> leaderboard
 ) {
     public record RegionInfo(
-            @Schema(description = "동네 코드", example = "1168010100") String regionCode,
-            @Schema(description = "동네 이름", example = "서울특별시 강남구 역삼동") String regionName
+            @Schema(description = "시·군·구 코드 (법정동 코드 앞 5자리)", example = "11740") String regionCode,
+            @Schema(description = "시·군·구 이름", example = "서울특별시 강동구") String regionName
     ) {}
 
     public record WeekPeriodInfo(

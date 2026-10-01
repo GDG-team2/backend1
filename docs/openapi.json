@@ -1985,9 +1985,10 @@
             "example": 2006
           },
           "regionCode": {
+            "pattern": "\\d{10}",
             "type": "string",
-            "description": "동네 코드 (법정동/행정동)",
-            "example": "4127310500"
+            "description": "동네 법정동 코드 (10자리 숫자, 다음 우편번호 서비스의 bcode). 랭킹은 앞 5자리(시·군·구) 단위로 묶임",
+            "example": "1174010800"
           },
           "agreements": {
             "$ref": "#/components/schemas/SignupRequestAgreements"
@@ -2274,11 +2275,10 @@
             "example": "선우"
           },
           "regionCode": {
-            "maxLength": 20,
-            "minLength": 1,
+            "pattern": "\\d{10}",
             "type": "string",
-            "description": "생활권 동네 코드",
-            "example": "4127310500"
+            "description": "동네 법정동 코드 (10자리 숫자). 랭킹은 앞 5자리(시·군·구) 단위로 묶임",
+            "example": "1174010800"
           },
           "birthYear": {
             "minimum": 1900,
@@ -2390,12 +2390,12 @@
           "regionCode": {
             "type": "string",
             "description": "동네 코드",
-            "example": "1168010100"
+            "example": "1174010800"
           },
           "regionName": {
             "type": "string",
             "description": "동네 이름",
-            "example": "서울특별시 강남구 역삼동"
+            "example": "서울특별시 강동구 성내동"
           }
         },
         "description": "동네 정보"
@@ -2826,16 +2826,16 @@
         "properties": {
           "regionCode": {
             "type": "string",
-            "description": "동네 코드",
-            "example": "1168010100"
+            "description": "시·군·구 코드 (법정동 코드 앞 5자리)",
+            "example": "11740"
           },
           "regionName": {
             "type": "string",
-            "description": "동네 이름",
-            "example": "서울특별시 강남구 역삼동"
+            "description": "시·군·구 이름",
+            "example": "서울특별시 강동구"
           }
         },
-        "description": "동네 정보"
+        "description": "랭킹 지역 (시·군·구 단위)"
       },
       "RegionRankingResponseWeekPeriodInfo": {
         "type": "object",

@@ -85,6 +85,29 @@ class RewardRankingIntegrationTest extends IntegrationTest {
     }
 
     @Test
+    void 랭킹은_같은_구라면_동이_달라도_함께_묶는다() throws Exception {
+        String district = uniqueRegion().substring(0, 5);
+        String dongA = newUser(district + "10100");
+        String dongB = newUser(district + "10800");
+        String otherDistrict = newUser(uniqueRegion());
+        completeMission(dongA, "WALK", 4);
+        completeMission(dongB, "CAFE", 4);
+        completeMission(otherDistrict, "WALK", 4);
+
+        Response board = get("/api/v1/rankings/my-region", dongA);
+        assertThat(board.body().path("region").path("regionCode").asText()).isEqualTo(district);
+        assertThat(board.body().path("leaderboard").size()).isEqualTo(2);
+        assertThat(get("/api/v1/rankings/my-region", otherDistrict).body().path("leaderboard").size()).isEqualTo(1);
+    }
+
+    @Test
+    void 법정동_코드가_10자리_숫자가_아니면_400() throws Exception {
+        String token = newUser(uniqueRegion());
+        assertThat(patch("/api/v1/users/profile", token, "{\"regionCode\":\"11740\"}").text("code")).isEqualTo("INVALID_INPUT");
+        assertThat(patch("/api/v1/users/profile", token, "{\"regionCode\":\"1174010800\"}").status()).isEqualTo(200);
+    }
+
+    @Test
     void 배지_도감에_진행도가_나온다() throws Exception {
         String token = newUser(uniqueRegion());
         completeMission(token, "WALK", 4);

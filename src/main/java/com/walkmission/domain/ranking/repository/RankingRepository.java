@@ -17,21 +17,21 @@ public interface RankingRepository extends JpaRepository<Ranking, Long> {
     @Query("select r from Ranking r join fetch r.user where r.weekStartDate < :weekStart")
     List<Ranking> findAllBeforeWeek(@Param("weekStart") LocalDate weekStart);
 
-    /** 랭킹 공개를 켠 같은 동네 사용자의 이번 주 점수 (높은 순, 동점이면 먼저 달성한 순) */
+    /** 랭킹 공개를 켠 같은 시·군·구(법정동 코드 앞 5자리) 사용자의 이번 주 점수 (높은 순, 동점이면 먼저 달성한 순) */
     @Query("""
             select r from Ranking r join fetch r.user u
-            where u.regionCode = :regionCode and r.weekStartDate = :weekStart and r.userScore > 0
+            where u.regionCode like concat(:districtCode, '%') and r.weekStartDate = :weekStart and r.userScore > 0
               and exists (select s.id from UserSetting s where s.user = u and s.rankingSetting = true)
             order by r.userScore desc, r.updatedAt asc
             """)
-    List<Ranking> findLeaderboard(@Param("regionCode") String regionCode,
+    List<Ranking> findLeaderboard(@Param("districtCode") String districtCode,
                                   @Param("weekStart") LocalDate weekStart, Pageable pageable);
 
     @Query("""
             select count(r) from Ranking r join r.user u
-            where u.regionCode = :regionCode and r.weekStartDate = :weekStart and r.userScore > :score
+            where u.regionCode like concat(:districtCode, '%') and r.weekStartDate = :weekStart and r.userScore > :score
               and exists (select s.id from UserSetting s where s.user = u and s.rankingSetting = true)
             """)
-    long countHigherScores(@Param("regionCode") String regionCode,
+    long countHigherScores(@Param("districtCode") String districtCode,
                            @Param("weekStart") LocalDate weekStart, @Param("score") int score);
 }

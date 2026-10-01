@@ -43,7 +43,7 @@ class AuthIntegrationTest extends IntegrationTest {
     @Test
     void 필수_약관을_빼면_빠진_약관을_알려준다() throws Exception {
         Response res = post("/api/v1/auth/signup", null, """
-                {"email":"t-%s@test.local","password":"password123","nickname":"t","regionCode":"1",
+                {"email":"t-%s@test.local","password":"password123","nickname":"t","regionCode":"1174010800",
                  "agreements":{"service":true,"privacy":true,"location":false}}""".formatted(UUID.randomUUID()));
 
         assertThat(res.status()).isEqualTo(400);
@@ -54,7 +54,7 @@ class AuthIntegrationTest extends IntegrationTest {
     @Test
     void 약한_비밀번호와_필수값_누락은_400() throws Exception {
         Response weak = post("/api/v1/auth/signup", null, """
-                {"email":"w-%s@test.local","password":"short","nickname":"t","regionCode":"1",
+                {"email":"w-%s@test.local","password":"short","nickname":"t","regionCode":"1174010800",
                  "agreements":{"service":true,"privacy":true,"location":true}}""".formatted(UUID.randomUUID()));
         assertThat(weak.text("code")).isEqualTo("INVALID_PASSWORD_FORMAT");
 

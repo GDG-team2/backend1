@@ -36,6 +36,7 @@ public abstract class IntegrationTest {
     protected static final double LAT = 37.498095;
     protected static final double LON = 127.027610;
     private static final AtomicInteger PLACE_SEQ = new AtomicInteger();
+    private static final AtomicInteger REGION_SEQ = new AtomicInteger();
 
     @Autowired protected MockMvc mvc;
     @Autowired protected ObjectMapper objectMapper;
@@ -93,8 +94,9 @@ public abstract class IntegrationTest {
 
     // ---------- 시나리오 헬퍼 ----------
 
+    /** 테스트마다 다른 시·군·구(앞 5자리)를 써서 랭킹이 섞이지 않게 한다. 실제로 없는 9xxxx 대역을 쓴다. */
     protected static String uniqueRegion() {
-        return "T" + UUID.randomUUID().toString().substring(0, 8);
+        return "%05d10100".formatted(90000 + REGION_SEQ.incrementAndGet());
     }
 
     protected String signupRequest(String email, String region) {

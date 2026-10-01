@@ -98,11 +98,11 @@ public class RankingService {
     public RegionRankingResponse getMyRegionRanking(Long userId, int limit) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-        String regionCode = user.getRegionCode();
+        String districtCode = RegionUtils.districtOf(user.getRegionCode());
         LocalDate weekStart = TimeUtils.weekStart(TimeUtils.today());
         int size = Math.max(1, Math.min(limit, MAX_LEADERBOARD_SIZE));
 
-        List<Ranking> top = rankingRepository.findLeaderboard(regionCode, weekStart, PageRequest.of(0, size));
+        List<Ranking> top = rankingRepository.findLeaderboard(districtCode, weekStart, PageRequest.of(0, size));
         List<RegionRankingResponse.RankingEntry> leaderboard = new ArrayList<>();
         int rank = 0;
         Integer prevScore = null;
@@ -124,11 +124,11 @@ public class RankingService {
         int myScore = mine != null ? mine.getUserScore() : 0;
         boolean participating = isRankingPublic(userId);
         Integer myRank = participating && myScore > 0
-                ? (int) rankingRepository.countHigherScores(regionCode, weekStart, myScore) + 1
+                ? (int) rankingRepository.countHigherScores(districtCode, weekStart, myScore) + 1
                 : null;
 
         return new RegionRankingResponse(
-                new RegionRankingResponse.RegionInfo(regionCode, RegionUtils.nameOf(regionCode)),
+                new RegionRankingResponse.RegionInfo(districtCode, RegionUtils.districtNameOf(districtCode)),
                 new RegionRankingResponse.WeekPeriodInfo(weekStart, weekStart.plusDays(6)),
                 new RegionRankingResponse.RankingEntry(
                         participating, user.getUserUuid(), user.getDisplayName(), user.getProfileImageUrl(), myRank, myScore,
@@ -146,7 +146,7 @@ public class RankingService {
                 userSettingRepository.findRankingPublicUserIds(scored.stream().map(r -> r.getUser().getId()).toList()));
 
         Map<String, List<Ranking>> groups = scored.stream()
-                .collect(Collectors.groupingBy(r -> r.getUser().getRegionCode() + "|" + r.getWeekStartDate()));
+                .collect(Collectors.groupingBy(r -> RegionUtils.districtOf(r.getUser().getRegionCode()) + "|" + r.getWeekStartDate()));
 
         for (List<Ranking> group : groups.values()) {
             group.sort(Comparator.comparing(Ranking::getUserScore).reversed());
