@@ -175,7 +175,7 @@ public class MissionService {
     /** 출발 시각을 약속한다(이미 약속했으면 시간 변경). 예정 미션은 여러 개 가질 수 있다. */
     @Transactional
     public ScheduledMissionInfo schedule(Long userId, Long missionId, MissionScheduleRequest request) {
-        MissionRecord mission = getMission(userId, missionId);
+        MissionRecord mission = getMissionForUpdate(userId, missionId);
         requireStatus(mission, MissionStatus.READY);
 
         LocalDateTime now = LocalDateTime.now();
@@ -201,7 +201,7 @@ public class MissionService {
 
     @Transactional
     public MissionStartResponse start(Long userId, Long missionId) {
-        MissionRecord mission = getMission(userId, missionId);
+        MissionRecord mission = getMissionForUpdate(userId, missionId);
         requireStatus(mission, MissionStatus.READY);
 
         if (missionRecordRepository.existsByUserIdAndStatusIn(userId, MissionStatus.WALKING)) {
@@ -221,7 +221,7 @@ public class MissionService {
      */
     @Transactional(noRollbackFor = BusinessException.class)
     public MissionArriveResponse arrive(Long userId, Long missionId, MissionArriveRequest request) {
-        MissionRecord mission = getMission(userId, missionId);
+        MissionRecord mission = getMissionForUpdate(userId, missionId);
         requireStatus(mission, MissionStatus.IN_PROGRESS);
 
         Place place = mission.getPlace();
@@ -248,7 +248,7 @@ public class MissionService {
 
     @Transactional
     public MissionCompleteResponse complete(Long userId, Long missionId, MissionCompleteRequest request) {
-        MissionRecord mission = getMission(userId, missionId);
+        MissionRecord mission = getMissionForUpdate(userId, missionId);
         requireStatus(mission, MissionStatus.ARRIVED);
 
         mission.complete(request.afterSurveyScore(), request.stepCount(), LocalDateTime.now());
@@ -286,7 +286,7 @@ public class MissionService {
 
     @Transactional
     public MissionAbortResponse abort(Long userId, Long missionId, MissionAbortRequest request) {
-        MissionRecord mission = getMission(userId, missionId);
+        MissionRecord mission = getMissionForUpdate(userId, missionId);
         if (!mission.getStatus().isActive()) {
             throw new BusinessException(ErrorCode.INVALID_MISSION_STATUS, Map.of("currentStatus", mission.getStatus().name()));
         }
@@ -392,8 +392,8 @@ public class MissionService {
                         kakaoPlace.placeUrl())));
     }
 
-    private MissionRecord getMission(Long userId, Long missionId) {
-        return missionRecordRepository.findByIdAndUserId(missionId, userId)
+    private MissionRecord getMissionForUpdate(Long userId, Long missionId) {
+        return missionRecordRepository.findByIdAndUserIdForUpdate(missionId, userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MISSION_NOT_FOUND));
     }
 

@@ -6,7 +6,9 @@ import com.walkmission.domain.mission.entity.MissionStatus;
 import com.walkmission.domain.mission.entity.PlaceCategory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import java.time.LocalDateTime;
@@ -16,6 +18,11 @@ import java.util.Optional;
 
 public interface MissionRecordRepository extends JpaRepository<MissionRecord, Long> {
     Optional<MissionRecord> findByIdAndUserId(Long id, Long userId);
+
+    /** 상태를 바꾸는 요청용: 같은 미션에 동시에 온 요청은 앞 요청이 끝날 때까지 기다렸다가 바뀐 상태를 본다 (중복 정산 방지) */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select m from MissionRecord m where m.id = :id and m.user.id = :userId")
+    Optional<MissionRecord> findByIdAndUserIdForUpdate(@Param("id") Long id, @Param("userId") Long userId);
     Optional<MissionRecord> findFirstByUserIdAndStatusInOrderByIdDesc(Long userId, Collection<MissionStatus> statuses);
     List<MissionRecord> findByUserIdAndStatus(Long userId, MissionStatus status);
     /** 출발을 약속하지 않은 추천 (다시 추천받으면 대체되는 대상) */
